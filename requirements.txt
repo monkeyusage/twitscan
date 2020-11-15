@@ -2,3 +2,4 @@ tweepy
 mypy
 tqdm
 pytest
+black

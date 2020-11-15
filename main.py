@@ -9,4 +9,4 @@ parser.add_argument(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    p = Participant(args.user, debug=args.debug)
+    p = Participant(args.user, debug_mode=args.debug)

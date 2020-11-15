@@ -1,5 +1,4 @@
-from typing import Dict, Iterable, List, Literal, Set
-import logging
+from typing import Any, Dict, Iterable, List, Literal, Set
 
 import tweepy
 from tqdm import tqdm
@@ -21,27 +20,31 @@ class TwitterUser:
         friends (users followed)
     """
 
-    def __init__(self, screen_name: str, debug: bool = False):
+    def __init__(self, screen_name: str, debug_mode: bool = False):
         if not screen_name:
             raise ValueError("Screen name must be entered when creating a Twitter User")
         
         self.user: User = api.get_user(screen_name=screen_name)
 
         # utility attributes
-        self.debug = print if debug else lambda msg:None
+        self.debug_mode: bool = debug_mode
 
         # common attributes for all users
         self.favs: List[Status] = self.get_favs()
         self.tweets: List[Status] = self.get_tweets()
         self.friends: Set[int] = self.get_friends()
 
+    def debug(self, msg:str) -> None:
+        if self.debug_mode:
+            print(msg)
+
     def get_favs(self) -> List[Status]:
-        self.debug(f"Getting favorites for {str(self)}")
+        self.debug(f"Getting favorites for {self}")
         favs: List[Status] = api.favorites(self.user.screen_name)
         return favs
 
     def get_tweets(self) -> List[Status]:
-        self.debug(f"Getting tweets for {str(self)}")
+        self.debug(f"Getting tweets for {self}")
         tweets: List[Status] = api.user_timeline(
             screen_name=self.user.screen_name,
             count=200,  # max allowed is 200
@@ -51,7 +54,7 @@ class TwitterUser:
         return tweets
 
     def get_friends(self) -> Set[int]:
-        self.debug(f"Getting friends (followees) for {str(self)}")
+        self.debug(f"Getting friends (followees) for {self}")
         friends: List[int] = api.friends_ids(self.user.id)
         return set(friends)
 
@@ -70,15 +73,15 @@ class Follower(TwitterUser):
         screen_name: str,
         follows: TwitterUser,
         retweets: List[Status],
-        debug: bool = False,
+        debug_mode: bool = False
     ):
-        super().__init__(screen_name, debug)
+        super().__init__(screen_name, debug_mode)
         self.follows: TwitterUser = follows
         self.retweets: List[Status] = retweets
         self.comments: List[Status] = self.get_comments()
 
     def get_comments(self) -> List[Status]:
-        self.debug(f"\tRetrieving comments for {str(self)}")
+        self.debug(f"\tRetrieving comments for {self}")
         comments: List[Status] = [
             tweet
             for tweet in self.tweets
@@ -87,7 +90,7 @@ class Follower(TwitterUser):
         return comments
 
     def count_likes(self) -> int:
-        self.debug(f"\tCounting likes for {str(self)}")
+        self.debug(f"\tCounting likes for {self}")
         liked_follows = list(
             filter(lambda tweet: tweet.user.id == self.follows.user.id, self.favs)
         )
@@ -101,16 +104,16 @@ class Participant(TwitterUser):
     MAX: Literal[100] = 100
     """Main interface to retrieve data, scans data from participant and his/her followers and saves it"""
 
-    def __init__(self, screen_name: str, debug: bool = False):
-        super().__init__(screen_name, debug)
+    def __init__(self, screen_name: str, debug_mode: bool = False):
+        super().__init__(screen_name, debug_mode)
         self.followers: List[Follower] = self.get_followers()
 
     def get_followers(self) -> List[Follower]:
         """parses followers information and stores in Follower attributes
-        Filters
+        
         """
         followers: List[User] = []
-        self.debug(f"Getting followers for {str(self)}")
+        self.debug(f"Getting followers for {self}")
         for page in tweepy.Cursor(
             api.followers, screen_name=self.user.screen_name
         ).pages():
@@ -120,15 +123,15 @@ class Participant(TwitterUser):
                 )
             followers.extend(page)
 
-        self.debug(f"Getting retweets for {str(self)}")
+        self.debug(f"Getting retweets for {self}")
         retweeters: Dict[str, List[Status]] = self.get_retweeters(followers)
-        self.debug(f"Analysing followers for {str(self)}")
+        self.debug(f"Analysing followers for {self}")
         analysed_followers: List[Follower] = [
             Follower(
                 screen_name=follower.screen_name,
                 follows=self,
                 retweets=retweeters[follower.screen_name],
-                debug=self.debug
+                debug_mode=self.debug_mode
             )
             for follower in tqdm(followers)
             if not follower.protected
@@ -150,13 +153,13 @@ class Participant(TwitterUser):
         for tweet in self.tweets:
             retweets: List[Status] = api.retweets(tweet.id)
             # make sure the retweets we loop over come from our unprotected followers
-            retweets: Iterable[Status] = filter(
+            filtered: Iterable[Status] = filter(
                 lambda retweet: (retweet.user.id in follower_id_set)
                 and (not retweet.user.protected),
                 retweets,
             )
             # for each rt we append the original tweet to the follower who rt'ed it
-            for retweet in retweets:
+            for retweet in filtered:
                 retweeters[retweet.user.screen_name].append(tweet)
         return retweeters
 
