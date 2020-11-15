@@ -1,4 +1,5 @@
 from typing import Dict, Iterable, List, Literal, Set
+import logging
 
 import tweepy
 from tqdm import tqdm
@@ -23,11 +24,11 @@ class TwitterUser:
     def __init__(self, screen_name: str, debug: bool = False):
         if not screen_name:
             raise ValueError("Screen name must be entered when creating a Twitter User")
-
+        
         self.user: User = api.get_user(screen_name=screen_name)
 
         # utility attributes
-        self.debug: bool = debug
+        self.debug = print if debug else lambda msg:None
 
         # common attributes for all users
         self.favs: List[Status] = self.get_favs()
@@ -35,14 +36,12 @@ class TwitterUser:
         self.friends: Set[int] = self.get_friends()
 
     def get_favs(self) -> List[Status]:
-        if self.debug:
-            print(f"Getting favorites for {str(self)}")
+        self.debug(f"Getting favorites for {str(self)}")
         favs: List[Status] = api.favorites(self.user.screen_name)
         return favs
 
     def get_tweets(self) -> List[Status]:
-        if self.debug:
-            print(f"Getting tweets for {str(self)}")
+        self.debug(f"Getting tweets for {str(self)}")
         tweets: List[Status] = api.user_timeline(
             screen_name=self.user.screen_name,
             count=200,  # max allowed is 200
@@ -52,8 +51,7 @@ class TwitterUser:
         return tweets
 
     def get_friends(self) -> Set[int]:
-        if self.debug:
-            print(f"Getting friends (followees) for {str(self)}")
+        self.debug(f"Getting friends (followees) for {str(self)}")
         friends: List[int] = api.friends_ids(self.user.id)
         return set(friends)
 
@@ -80,8 +78,7 @@ class Follower(TwitterUser):
         self.comments: List[Status] = self.get_comments()
 
     def get_comments(self) -> List[Status]:
-        if self.debug:
-            print(f"\tRetrieving comments for {str(self)}")
+        self.debug(f"\tRetrieving comments for {str(self)}")
         comments: List[Status] = [
             tweet
             for tweet in self.tweets
@@ -90,8 +87,7 @@ class Follower(TwitterUser):
         return comments
 
     def count_likes(self) -> int:
-        if self.debug:
-            print(f"\tCounting likes for {str(self)}")
+        self.debug(f"\tCounting likes for {str(self)}")
         liked_follows = list(
             filter(lambda tweet: tweet.user.id == self.follows.user.id, self.favs)
         )
@@ -114,8 +110,7 @@ class Participant(TwitterUser):
         Filters
         """
         followers: List[User] = []
-        if self.debug:
-            print(f"Getting followers for {str(self)}")
+        self.debug(f"Getting followers for {str(self)}")
         for page in tweepy.Cursor(
             api.followers, screen_name=self.user.screen_name
         ).pages():
@@ -125,11 +120,9 @@ class Participant(TwitterUser):
                 )
             followers.extend(page)
 
-        if self.debug:
-            print(f"Getting retweets for {str(self)}")
+        self.debug(f"Getting retweets for {str(self)}")
         retweeters: Dict[str, List[Status]] = self.get_retweeters(followers)
-        if self.debug:
-            print(f"Analysing followers for {str(self)}")
+        self.debug(f"Analysing followers for {str(self)}")
         analysed_followers: List[Follower] = [
             Follower(
                 screen_name=follower.screen_name,
