@@ -4,7 +4,7 @@ from twitter import Participant
 parser = ArgumentParser()
 parser.add_argument("user", type=str, default="", help="user to analyse")
 parser.add_argument(
-    "--debug", action="store_true", default=False, help="run in debug mode"
+    "-d", "--debug", action="store_true", default=False, help="run in debug mode"
 )
 
 if __name__ == "__main__":
