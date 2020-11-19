@@ -1,5 +1,6 @@
 from typing import List, Literal, Set
 from datetime import datetime
+from sqlite3 import Connection
 
 import tweepy
 from tqdm import tqdm
@@ -11,6 +12,7 @@ from secret import auth
 api = tweepy.API(
     auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True
 )
+
 
 class Status:
     """Acts like a filter for useful information when retrieving tweepy Statuses"""
@@ -54,7 +56,9 @@ class TwitterUser:
             "Twitter API accepts retrieval of maximum 3200 tweets for each user"
         )
 
-    def __init__(self, screen_name: str, debug_mode: bool = False):
+    def __init__(
+        self, screen_name: str, db_connection: Connection, debug_mode: bool = False
+    ):
         if not screen_name:
             raise ValueError("Screen name must be entered when creating a Twitter User")
 
@@ -68,6 +72,7 @@ class TwitterUser:
 
         # utility attributes
         self.debug_mode: bool = debug_mode
+        self.connection: Connection = db_connection
 
         # advanced attributes for all users
         self.favorites_count: int = user.favourites_count
@@ -120,7 +125,7 @@ class TwitterUser:
         return filtered_tweets
 
     def get_retweets(self) -> List[Status]:
-        retweets : List[Status] = []
+        retweets: List[Status] = []
         for tweet in self.tweets:
             rts = [Status(rt) for rt in api.retweets(tweet.id)]
             retweets.extend(rts)
@@ -142,8 +147,10 @@ class UserScanner(TwitterUser):
     MAX_FOLLOWERS: Literal[100] = 100
     """Main interface to retrieve data, scans data from participant and his/her followers and saves it"""
 
-    def __init__(self, screen_name: str, debug_mode: bool = False):
-        super().__init__(screen_name, debug_mode)
+    def __init__(
+        self, screen_name: str, db_connection: Connection, debug_mode: bool = False
+    ):
+        super().__init__(screen_name, db_connection, debug_mode)
         if self.followers_count > UserScanner.MAX_FOLLOWERS:
             raise ValueError(
                 f"{self} has more than maximum number of followers allowed for this study: {UserScanner.MAX_FOLLOWERS}"
@@ -158,15 +165,16 @@ class UserScanner(TwitterUser):
             followers.extend(page)
 
         self.debug(f"\n####################\Scanning followers for {self}")
-        followers: List[User] = [
+        registered_followers: List[TwitterUser] = [
             TwitterUser(
                 screen_name=follower.screen_name,
+                db_connection=self.connection,
                 debug_mode=self.debug_mode,
             )
             for follower in tqdm(followers)
             if not follower.protected
         ]
-        return followers
+        return registered_followers
 
     def __repr__(self):
         return f"UserScanner({self.screen_name}, id={self.id})"

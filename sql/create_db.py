@@ -1,6 +1,6 @@
 import sqlite3
 from sqlite3 import Connection
-
+from argparse import ArgumentParser
 
 
 def print_schema(connection: Connection):
@@ -11,25 +11,33 @@ def print_schema(connection: Connection):
     ):
         print("{}:".format(table_name))
         for (
-            column_id, column_name, column_type,
-            column_not_null, column_default, column_pk,
+            column_id,
+            column_name,
+            column_type,
+            column_not_null,
+            column_default,
+            column_pk,
         ) in connection.execute("PRAGMA table_info('{}');".format(table_name)):
-            print("  {id}: {name}({type}){null}{default}{pk}".format(
-                id=column_id,
-                name=column_name,
-                type=column_type,
-                null=" not null" if column_not_null else "",
-                default=" [{}]".format(column_default) if column_default else "",
-                pk=" *{}".format(column_pk) if column_pk else "",
-            ))
+            print(
+                "  {id}: {name}({type}){null}{default}{pk}".format(
+                    id=column_id,
+                    name=column_name,
+                    type=column_type,
+                    null=" not null" if column_not_null else "",
+                    default=" [{}]".format(column_default) if column_default else "",
+                    pk=" *{}".format(column_pk) if column_pk else "",
+                )
+            )
         print()
 
 
-def create_db(db_path:str=":memory:") -> Connection:
+def create_db(db_name: str = ":memory:") -> Connection:
+    db_path = "data/" + db_name if not db_name == ":memory:" else db_name
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     with conn:
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE users (
                 -- ids
                 user_id INTEGER NOT NULL PRIMARY KEY,
@@ -46,7 +54,8 @@ def create_db(db_path:str=":memory:") -> Connection:
             )"""
         )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE statuses (
                 -- ids
                 status_id INTEGER NOT NULL PRIMARY KEY,
@@ -66,15 +75,17 @@ def create_db(db_path:str=":memory:") -> Connection:
             )"""
         )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE status_mentions (
                 mention_id INTEGER NOT NULL PRIMARY KEY,
                 status_id INTEGER NOT NULL,
                 mentioned_user_id INTEGER NOT NULL
             )"""
         )
-        
-        cursor.execute("""
+
+        cursor.execute(
+            """
             CREATE TABLE friends (
                 friendship_id INTEGER NOT NULL PRIMARY KEY,
                 following_user_id INTEGER NOT NULL,
@@ -82,7 +93,8 @@ def create_db(db_path:str=":memory:") -> Connection:
             )"""
         )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE followers (
                 followership_id INTEGER NOT NULL PRIMARY KEY,
                 followed_user_id INTEGER NOT NULL,
@@ -90,7 +102,8 @@ def create_db(db_path:str=":memory:") -> Connection:
             )"""
         )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE likes (
                 like_id INTEGER NOT NULL PRIMARY KEY,
                 status_id INTEGER NOT NULL,
@@ -98,16 +111,28 @@ def create_db(db_path:str=":memory:") -> Connection:
             )"""
         )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE retweets (
                 retweet_id INTEGER NOT NULL PRIMARY KEY,
                 status_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL
             )"""
         )
-    
+
     return conn
 
+
 if __name__ == "__main__":
-    connection = create_db()
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--db", default=":memory:", help="defines name of db for storage in data folder"
+    )
+
+    args = parser.parse_args()
+    if args.db == ":memory":
+        print(
+            "Create in-memory database, for persistant database specify db name with --db "
+        )
+    connection = create_db(args.db)
     print_schema(connection)
