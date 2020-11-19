@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from twitter import Participant
+from twitter import UserScanner
 
 parser = ArgumentParser()
 parser.add_argument("user", type=str, default="", help="user to analyse")
@@ -9,4 +9,4 @@ parser.add_argument(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    p = Participant(args.user, debug_mode=args.debug)
+    u = UserScanner(args.user, debug_mode=args.debug)

@@ -1,5 +1,6 @@
 from typing import Dict, Iterable, List, Literal, Set
 from datetime import datetime
+import sqlite3
 
 import tweepy
 from tqdm import tqdm
@@ -11,7 +12,6 @@ from secret import auth
 api = tweepy.API(
     auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True
 )
-
 
 class Status:
     """Acts like a filter for useful information when retrieving tweepy Statuses"""
@@ -131,84 +131,35 @@ class TwitterUser:
         return str(self)
 
 
-class Follower(TwitterUser):
-    """A simple class to collect data related to follower of Participant"""
-
-    def __init__(
-        self,
-        screen_name: str,
-        follows: TwitterUser,
-        retweets: List[Status],
-        debug_mode: bool = False,
-    ):
-        super().__init__(screen_name, debug_mode)
-        self.follows: TwitterUser = follows
-        self.retweets: List[Status] = retweets
-
-    def __repr__(self) -> str:
-        return f"Follower({self.screen_name}, id={self.id})"
-
-
-class Participant(TwitterUser):
+class UserScanner(TwitterUser):
     MAX_FOLLOWERS: Literal[100] = 100
     """Main interface to retrieve data, scans data from participant and his/her followers and saves it"""
 
     def __init__(self, screen_name: str, debug_mode: bool = False):
         super().__init__(screen_name, debug_mode)
-        if self.followers_count > Participant.MAX_FOLLOWERS:
+        if self.followers_count > UserScanner.MAX_FOLLOWERS:
             raise ValueError(
-                f"{self} has more than maximum number of followers allowed for this study: {Participant.MAX_FOLLOWERS}"
+                f"{self} has more than maximum number of followers allowed for this study: {UserScanner.MAX_FOLLOWERS}"
             )
-        self.followers: List[Follower] = self.get_followers()
+        self.followers: List[User] = self.get_followers()
 
-    def get_followers(self) -> List[Follower]:
+    def get_followers(self) -> List[User]:
         """parses followers information and stores in Follower attributes"""
         followers: List[User] = []
         self.debug(f"Getting followers for {self}")
         for page in tweepy.Cursor(api.followers, screen_name=self.screen_name).pages():
             followers.extend(page)
 
-        self.debug(f"Getting retweets for {self}")
-        retweeters: Dict[int, List[Status]] = self.get_retweeters(followers)
         self.debug(f"\n####################\Scanning followers for {self}")
-        analysed_followers: List[Follower] = [
-            Follower(
+        followers: List[User] = [
+            TwitterUser(
                 screen_name=follower.screen_name,
-                follows=self,
-                retweets=retweeters[follower.id],
                 debug_mode=self.debug_mode,
             )
             for follower in tqdm(followers)
             if not follower.protected
         ]
-        return analysed_followers
-
-    def get_retweeters(self, followers: List[User]) -> Dict[int, List[Status]]:
-        """assigns tweets from Participant rt'ed by follower for each follower
-        Parsing for retweets is more efficient here than in each follower
-        This allow for only one api call per tweet instead of parsing participant tweets by every follower
-        :param followers: List[User] list of raw  followers
-        :returns: Dict[str, List[Status]]: dict storing (screen_name, list of tweets the followers rt'ed)
-        """
-        follower_id_set: Set[int] = set(follower.id for follower in followers)
-        # for each follower we create an empty list of tweets and fill those with tweets they have rt'ed
-        retweeters: Dict[int, List[Status]] = {
-            follower.id: [] for follower in followers
-        }
-        for tweet in self.tweets:
-            # for every tweet we get all the associated retweets
-            retweets: List[Status] = [
-                Status(retweet) for retweet in api.retweets(tweet.id)
-            ]
-            # make sure the retweets we loop over come from our unprotected followers
-            filtered: Iterable[Status] = filter(
-                lambda retweet: retweet.user_id in follower_id_set,
-                retweets,
-            )
-            # for each rt we append the original tweet to the follower who rt'ed it
-            for retweet in filtered:
-                retweeters[retweet.user_id].append(tweet)
-        return retweeters
+        return followers
 
     def __repr__(self):
-        return f"Participant({self.screen_name}, id={self.id})"
+        return f"UserScanner({self.screen_name}, id={self.id})"
