@@ -10,7 +10,7 @@ CREATE TABLE users (
     friends_count INTEGER NOT NULL, -- friend is whom user follows
     followers_count INTEGER NOT NULL,
     -- bools
-    is_verified INTEGER NOT NULL,
+    is_verified INTEGER NOT NULL
 )
 
 CREATE TABLE statuses (
@@ -34,17 +34,29 @@ CREATE TABLE statuses (
 CREATE TABLE status_mentions (
     mention_id INTEGER NOT NULL PRIMARY KEY,
     status_id INTEGER NOT NULL,
-    mentioned_user_id INTEGER NOT NULL,
+    mentioned_user_id INTEGER NOT NULL
 )
 
 CREATE TABLE friends (
-    relation_id INTEGER NOT NULL PRIMARY KEY,
+    friendship_id INTEGER NOT NULL PRIMARY KEY,
+    following_user_id INTEGER NOT NULL,
+    friend_user_id INTEGER NOT NULL
+)
+
+CREATE TABLE followers (
+    followership_id INTEGER NOT NULL PRIMARY KEY,
     followed_user_id INTEGER NOT NULL,
-    friend_user_id INTEGER NOT NULL,
+    follower_user_id INTEGER NOT NULL
 )
 
 CREATE TABLE likes (
     like_id INTEGER NOT NULL PRIMARY KEY,
+    status_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL
+)
+
+CREATE TABLE retweets (
+    retweet_id INTEGER NOT PRIMARY KEY,
     status_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL
 )

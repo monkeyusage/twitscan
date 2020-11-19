@@ -1,6 +1,5 @@
-from typing import Dict, Iterable, List, Literal, Set
+from typing import List, Literal, Set
 from datetime import datetime
-import sqlite3
 
 import tweepy
 from tqdm import tqdm
@@ -76,6 +75,7 @@ class TwitterUser:
 
         self.statuses_count: int = user.statuses_count
         self.tweets: List[Status] = self.get_tweets()
+        self.retweets_of_user: List[Status] = self.get_retweets()
 
         self.friends_count: int = user.friends_count
         self.friends: Set[int] = self.get_friends()
@@ -118,6 +118,13 @@ class TwitterUser:
                     break
         filtered_tweets: List[Status] = [Status(status) for status in tweets]
         return filtered_tweets
+
+    def get_retweets(self) -> List[Status]:
+        retweets : List[Status] = []
+        for tweet in self.tweets:
+            rts = [Status(rt) for rt in api.retweets(tweet.id)]
+            retweets.extend(rts)
+        return retweets
 
     def get_friends(self) -> Set[int]:
         self.debug(f"Getting friends (followees) for {self}")
