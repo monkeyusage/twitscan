@@ -31,14 +31,15 @@ def print_schema(connection: Connection):
         print()
 
 
-def create_db(db_name: str = ":memory:") -> Connection:
+def get_connection(db_name: str = ":memory:") -> Connection:
     db_path = "data/" + db_name if not db_name == ":memory:" else db_name
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     with conn:
+        # Create all tables if they don't exist
         cursor.execute(
             """
-            CREATE TABLE users (
+            CREATE TABLE IF NOT EXISTS users (
                 -- ids
                 user_id INTEGER NOT NULL PRIMARY KEY,
                 screen_name VARCHAR(51) NOT NULL,
@@ -56,7 +57,7 @@ def create_db(db_name: str = ":memory:") -> Connection:
 
         cursor.execute(
             """
-            CREATE TABLE statuses (
+            CREATE TABLE IF NOT EXISTS statuses (
                 -- ids
                 status_id INTEGER NOT NULL PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -77,7 +78,7 @@ def create_db(db_name: str = ":memory:") -> Connection:
 
         cursor.execute(
             """
-            CREATE TABLE status_mentions (
+            CREATE TABLE IF NOT EXISTS status_mentions (
                 mention_id INTEGER NOT NULL PRIMARY KEY,
                 status_id INTEGER NOT NULL,
                 mentioned_user_id INTEGER NOT NULL
@@ -86,7 +87,7 @@ def create_db(db_name: str = ":memory:") -> Connection:
 
         cursor.execute(
             """
-            CREATE TABLE friends (
+            CREATE TABLE IF NOT EXISTS friends (
                 friendship_id INTEGER NOT NULL PRIMARY KEY,
                 following_user_id INTEGER NOT NULL,
                 friend_user_id INTEGER NOT NULL
@@ -95,7 +96,7 @@ def create_db(db_name: str = ":memory:") -> Connection:
 
         cursor.execute(
             """
-            CREATE TABLE followers (
+            CREATE TABLE IF NOT EXISTS followers (
                 followership_id INTEGER NOT NULL PRIMARY KEY,
                 followed_user_id INTEGER NOT NULL,
                 follower_user_id INTEGER NOT NULL
@@ -104,7 +105,7 @@ def create_db(db_name: str = ":memory:") -> Connection:
 
         cursor.execute(
             """
-            CREATE TABLE likes (
+            CREATE TABLE IF NOT EXISTS likes (
                 like_id INTEGER NOT NULL PRIMARY KEY,
                 status_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL
@@ -113,7 +114,7 @@ def create_db(db_name: str = ":memory:") -> Connection:
 
         cursor.execute(
             """
-            CREATE TABLE retweets (
+            CREATE TABLE IF NOT EXISTS retweets (
                 retweet_id INTEGER NOT NULL PRIMARY KEY,
                 status_id INTEGER NOT NULL,
                 user_id INTEGER NOT NULL
@@ -134,5 +135,5 @@ if __name__ == "__main__":
         print(
             "Create in-memory database, for persistant database specify db name with --db "
         )
-    connection = create_db(args.db)
+    connection = get_connection(args.db)
     print_schema(connection)
