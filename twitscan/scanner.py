@@ -1,3 +1,4 @@
+from sqlalchemy.util.langhelpers import format_argspec_init
 from twitscan.errors import TwitscanError
 from typing import Any, List, Literal
 from datetime import datetime
@@ -7,8 +8,7 @@ from tweepy import Cursor
 from tweepy.models import User as RawUser
 from tweepy.models import Status as RawStatus
 
-from twitscan import api
-# from twitscan.helpers import add_user, add_status
+from twitscan import api, session
 
 
 class TwitterStatus:
@@ -30,8 +30,6 @@ class TwitterStatus:
         self.user_mentions: List[int] = [
             user["id"] for user in twitter_status.entities["user_mentions"]
         ]
-
-        # add_status(self)
 
     def __str__(self) -> str:
         return f"TwitterStatus(user_id={self.user_id}, id={self.id}, likes={self.favorite_count}, rts={self.retweet_count})"
@@ -94,8 +92,6 @@ class TwitterUser:
         self.followers_count: int = user.followers_count
         self.followers: List[int] = self.get_followers()
 
-        # add TwitterUser to database
-        # add_user(self)
 
     def debug(self, msg: str) -> None:
         if self.debug_mode:
@@ -103,8 +99,9 @@ class TwitterUser:
 
     def get_liked(self) -> List[TwitterStatus]:
         self.debug(f"Getting favorites for {self}")
+        favorites = api.favorites(self.screen_name)
         favs: List[TwitterStatus] = [
-            TwitterStatus(tweet) for tweet in api.favorites(self.screen_name)
+            TwitterStatus(tweet) for tweet in favorites
         ]
         return favs
 
