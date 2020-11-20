@@ -1,4 +1,3 @@
-from sqlalchemy.util.langhelpers import format_argspec_init
 from twitscan.errors import TwitscanError
 from typing import Any, List, Literal
 from datetime import datetime
