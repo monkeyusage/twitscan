@@ -3,3 +3,4 @@ mypy
 tqdm
 pytest
 black
+sqlalchemy

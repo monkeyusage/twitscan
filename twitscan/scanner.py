@@ -1,20 +1,17 @@
-from typing import List, Literal, Set
+from twitscan.errors import TwitscanError
+from typing import Any, List, Literal
 from datetime import datetime
-from sqlite3 import Connection
 
-import tweepy
 from tqdm import tqdm
-from tweepy.models import User
+from tweepy import Cursor
+from tweepy.models import User as RawUser
 from tweepy.models import Status as RawStatus
 
-from secret import auth
-
-api = tweepy.API(
-    auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True
-)
+from twitscan import api
+# from twitscan.helpers import add_user, add_status
 
 
-class Status:
+class TwitterStatus:
     """Acts like a filter for useful information when retrieving tweepy Statuses"""
 
     def __init__(self, twitter_status: RawStatus):
@@ -29,13 +26,15 @@ class Status:
         self.in_reply_to_screen_name: str = twitter_status.in_reply_to_screen_name
         self.in_reply_to_status_id: int = twitter_status.in_reply_to_status_id
         self.in_reply_to_user_id: int = twitter_status.in_reply_to_user_id
-        self.is_retweet: bool = self.text.startswith("RT ")
+        self.is_retweet: bool = hasattr(twitter_status, "retweeted_status")
         self.user_mentions: List[int] = [
             user["id"] for user in twitter_status.entities["user_mentions"]
         ]
 
+        # add_status(self)
+
     def __str__(self) -> str:
-        return f"Status(user_id={self.user_id}, id={self.id}, likes={self.favorite_count}, rts={self.retweet_count})"
+        return f"TwitterStatus(user_id={self.user_id}, id={self.id}, likes={self.favorite_count}, rts={self.retweet_count})"
 
     def __repr__(self) -> str:
         return str(self)
@@ -57,12 +56,20 @@ class TwitterUser:
         )
 
     def __init__(
-        self, screen_name: str, db_connection: Connection, debug_mode: bool = False
+        self,
+        user_id: int = None,
+        screen_name: str = None,
+        debug_mode: bool = False,
     ):
-        if not screen_name:
-            raise ValueError("Screen name must be entered when creating a Twitter User")
+        if (not screen_name) and (not user_id):
+            raise ValueError(
+                "screen_name or user_id must be entered when creating a TwitterUser"
+            )
 
-        user: User = api.get_user(screen_name=screen_name)
+        if user_id:
+            user: RawUser = api.get_user(user_id=user_id)
+        else:
+            user = api.get_user(screen_name=screen_name)
 
         # basic attributes
         self.screen_name: str = user.screen_name
@@ -72,33 +79,36 @@ class TwitterUser:
 
         # utility attributes
         self.debug_mode: bool = debug_mode
-        self.connection: Connection = db_connection
 
         # advanced attributes for all users
         self.favorites_count: int = user.favourites_count
-        self.liked: List[Status] = self.get_liked()
+        self.liked: List[TwitterStatus] = self.get_liked()
 
         self.statuses_count: int = user.statuses_count
-        self.tweets: List[Status] = self.get_tweets()
-        self.retweets_of_user: List[Status] = self.get_retweets()
+        self.tweets: List[TwitterStatus] = self.get_tweets()
+        self.retweets_of_user: List[TwitterStatus] = self.get_retweets()
 
         self.friends_count: int = user.friends_count
-        self.friends: Set[int] = self.get_friends()
+        self.friends: List[int] = self.get_friends()
 
         self.followers_count: int = user.followers_count
+        self.followers: List[int] = self.get_followers()
+
+        # add TwitterUser to database
+        # add_user(self)
 
     def debug(self, msg: str) -> None:
         if self.debug_mode:
             print(msg)
 
-    def get_liked(self) -> List[Status]:
+    def get_liked(self) -> List[TwitterStatus]:
         self.debug(f"Getting favorites for {self}")
-        favs: List[Status] = [
-            Status(tweet) for tweet in api.favorites(self.screen_name)
+        favs: List[TwitterStatus] = [
+            TwitterStatus(tweet) for tweet in api.favorites(self.screen_name)
         ]
         return favs
 
-    def get_tweets(self) -> List[Status]:
+    def get_tweets(self) -> List[TwitterStatus]:
         self.debug(f"Getting tweets for {self}")
         if TwitterUser.MAX_TWEETS <= 200:
             # if we set max tweets under or equal 200 we just throw one request
@@ -111,7 +121,7 @@ class TwitterUser:
         else:
             # otherwise we throw requests until we get either all tweets or twitter limit being 3200
             tweets = []
-            for older_tweets in tweepy.Cursor(
+            for older_tweets in Cursor(
                 api.user_timeline,
                 screen_name=self.screen_name,
                 count=200,
@@ -121,20 +131,31 @@ class TwitterUser:
                 tweets.extend(older_tweets)
                 if len(tweets) > TwitterUser.MAX_TWEETS:
                     break
-        filtered_tweets: List[Status] = [Status(status) for status in tweets]
+        filtered_tweets: List[TwitterStatus] = [
+            TwitterStatus(status) for status in tweets
+        ]
         return filtered_tweets
 
-    def get_retweets(self) -> List[Status]:
-        retweets: List[Status] = []
+    def get_retweets(self) -> List[TwitterStatus]:
+        self.debug(f"Getting retweets for {self}")
+        retweets: List[TwitterStatus] = []
         for tweet in self.tweets:
-            rts = [Status(rt) for rt in api.retweets(tweet.id)]
+            rts = [TwitterStatus(rt) for rt in api.retweets(tweet.id)]
             retweets.extend(rts)
         return retweets
 
-    def get_friends(self) -> Set[int]:
+    def get_friends(self) -> List[int]:
         self.debug(f"Getting friends (followees) for {self}")
         friends: List[int] = api.friends_ids(self.id)
-        return set(friends)
+        return friends
+
+    def get_followers(self) -> List[int]:
+        followers: List[int] = []
+        self.debug(f"Getting followers for {self}")
+        for page in Cursor(api.followers, screen_name=self.screen_name).pages():
+            ids = [user.id for user in page]
+            followers.extend(ids)
+        return followers
 
     def __str__(self) -> str:
         return f"TwitterUser({self.screen_name}, id={self.id})"
@@ -147,34 +168,27 @@ class UserScanner(TwitterUser):
     MAX_FOLLOWERS: Literal[100] = 100
     """Main interface to retrieve data, scans data from participant and his/her followers and saves it"""
 
-    def __init__(
-        self, screen_name: str, db_connection: Connection, debug_mode: bool = False
-    ):
-        super().__init__(screen_name, db_connection, debug_mode)
+    def __init__(self, screen_name: str, debug_mode: bool = False):
+        super().__init__(screen_name=screen_name, debug_mode=debug_mode)
         if self.followers_count > UserScanner.MAX_FOLLOWERS:
-            raise ValueError(
-                f"{self} has more than maximum number of followers allowed for this study: {UserScanner.MAX_FOLLOWERS}"
+            raise TwitscanError(
+                f"{self} has more than maximum number of followers allowed for this study: {UserScanner.MAX_FOLLOWERS}",
+                "Either raise the maximum allowed number of followers or remove the user from the scanning list"
             )
-        self.followers: List[User] = self.get_followers()
+        self.user_followers: List[TwitterUser] = self.scan_followers()
 
-    def get_followers(self) -> List[User]:
+    def scan_followers(self) -> List[TwitterUser]:
         """parses followers information and stores in Follower attributes"""
-        followers: List[User] = []
-        self.debug(f"Getting followers for {self}")
-        for page in tweepy.Cursor(api.followers, screen_name=self.screen_name).pages():
-            followers.extend(page)
-
-        self.debug(f"\n####################\Scanning followers for {self}")
-        registered_followers: List[TwitterUser] = [
+        self.debug(f"\n####################\nScanning followers for {self}")
+        user_followers: List[TwitterUser] = [
             TwitterUser(
-                screen_name=follower.screen_name,
-                db_connection=self.connection,
+                user_id=follower_id,
                 debug_mode=self.debug_mode,
             )
-            for follower in tqdm(followers)
-            if not follower.protected
+            for follower_id in tqdm(self.followers)
+            if not api.get_user(follower_id).protected
         ]
-        return registered_followers
+        return user_followers
 
     def __repr__(self):
         return f"UserScanner({self.screen_name}, id={self.id})"
