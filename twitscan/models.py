@@ -6,8 +6,10 @@ Base = declarative_base()
 
 if __name__ == "__main__":
     import sqlalchemy
+
     engine = sqlalchemy.create_engine("sqlite:///data/twitter.db")
     Base.metadata.bind = engine
+
 
 class Status(Base):
     __tablename__ = "status"
@@ -20,7 +22,8 @@ class Status(Base):
     in_reply_to_user_id = Column(Integer)
     is_retweet = Column(Boolean, nullable=False)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
-    user_mentions = relationship("Mention", backref=backref("status"))
+    user_mentions = relationship("Mention", backref=backref("status"), lazy=True)
+
 
 class Mention(Base):
     __tablename__ = "mention"
@@ -28,14 +31,16 @@ class Mention(Base):
     status_id = Column(Integer, ForeignKey("status.status_id"), nullable=False)
     user_id = Column(Integer, nullable=False)
 
+
 interacted_status = Table(
     "interacted_status",
     Base.metadata,
     Column("status_id", Integer, ForeignKey("status.status_id")),
     Column("user_id", Integer, ForeignKey("user.user_id")),
     Column("liked", Boolean, nullable=False),
-    Column("retweeted", Boolean, nullable=False)
+    Column("retweeted", Boolean, nullable=False),
 )
+
 
 class User(Base):
     __tablename__ = "user"
@@ -46,10 +51,13 @@ class User(Base):
     status_count = Column(Integer, nullable=False, default=0)
     friends_count = Column(Integer, nullable=False, default=0)
     followers_count = Column(Integer, nullable=False, default=0)
-    tweets = relationship("Status", backref=backref("user"))
-    friends = relationship("Friend", backref=backref("user"))
-    followers = relationship("Follower", backref=backref("user"))
-    interacted_tweets = relationship("Status", secondary=interacted_status, back_populates="user")
+    tweets = relationship("Status", backref=backref("user"), lazy=True)
+    friends = relationship("Friend", backref=backref("user"), lazy=True)
+    followers = relationship("Follower", backref=backref("user"), lazy=True)
+    interacted_tweets = relationship(
+        "Status", secondary=interacted_status, back_populates="user", lazy=True
+    )
+
 
 class Friend(Base):
     __tablename__ = "friend"
@@ -64,6 +72,6 @@ class Follower(Base):
     user_id = Column(Integer, ForeignKey("user.user_id"))
     follower_id = Column(Integer, nullable=False)
 
+
 if __name__ == "__main__":
     Base.metadata.create_all()
-    

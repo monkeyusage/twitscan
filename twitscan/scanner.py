@@ -1,5 +1,5 @@
 from twitscan.errors import TwitscanError
-from typing import Any, List, Literal
+from typing import List, Literal
 from datetime import datetime
 
 from tqdm import tqdm
@@ -8,10 +8,14 @@ from tweepy.models import User as RawUser
 from tweepy.models import Status as RawStatus
 
 from twitscan import api, session
+from twitscan.models import Status, Mention
 
 
 class TwitterStatus:
-    """Acts like a filter for useful information when retrieving tweepy Statuses"""
+    """
+    Acts like a filter for useful information when retrieving tweepy Statuses
+    Inserts Status and related information into database
+    """
 
     def __init__(self, twitter_status: RawStatus):
         self.user_id: int = twitter_status.user.id
@@ -29,6 +33,23 @@ class TwitterStatus:
         self.user_mentions: List[int] = [
             user["id"] for user in twitter_status.entities["user_mentions"]
         ]
+
+        mentions = [
+            Mention(status_id=self.id, user_id=user_id)
+            for user_id in self.user_mentions
+        ]
+        session.add_all(mentions)
+
+        status = Status(
+            status_id=self.id,
+            created_at=self.created_at,
+            favorite_count=self.favorite_count,
+            retweet_count=self.retweet_count,
+            in_reply_to_status_id=self.in_reply_to_screen_name,
+            in_reply_to_user_id=self.in_reply_to_user_id,
+            is_retweet=self.is_retweet,
+        )
+        session.add(status)
 
     def __str__(self) -> str:
         return f"TwitterStatus(user_id={self.user_id}, id={self.id}, likes={self.favorite_count}, rts={self.retweet_count})"
@@ -91,7 +112,6 @@ class TwitterUser:
         self.followers_count: int = user.followers_count
         self.followers: List[int] = self.get_followers()
 
-
     def debug(self, msg: str) -> None:
         if self.debug_mode:
             print(msg)
@@ -99,9 +119,7 @@ class TwitterUser:
     def get_liked(self) -> List[TwitterStatus]:
         self.debug(f"Getting favorites for {self}")
         favorites = api.favorites(self.screen_name)
-        favs: List[TwitterStatus] = [
-            TwitterStatus(tweet) for tweet in favorites
-        ]
+        favs: List[TwitterStatus] = [TwitterStatus(tweet) for tweet in favorites]
         return favs
 
     def get_tweets(self) -> List[TwitterStatus]:
@@ -169,7 +187,7 @@ class UserScanner(TwitterUser):
         if self.followers_count > UserScanner.MAX_FOLLOWERS:
             raise TwitscanError(
                 f"{self} has more than maximum number of followers allowed for this study: {UserScanner.MAX_FOLLOWERS}",
-                "Either raise the maximum allowed number of followers or remove the user from the scanning list"
+                "Either raise the maximum allowed number of followers or remove the user from the scanning list",
             )
         self.user_followers: List[TwitterUser] = self.scan_followers()
 
