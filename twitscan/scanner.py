@@ -34,13 +34,13 @@ class TwitterStatus:
             user["id"] for user in twitter_status.entities["user_mentions"]
         ]
 
-        mentions = [
+        mentions : List[Mention] = [
             Mention(status_id=self.id, user_id=user_id)
             for user_id in self.user_mentions
         ]
         session.add_all(mentions)
 
-        status = Status(
+        status : Status = Status(
             status_id=self.id,
             created_at=self.created_at,
             favorite_count=self.favorite_count,
