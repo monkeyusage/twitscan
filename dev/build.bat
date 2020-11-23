@@ -1,2 +1,2 @@
 black .
-mypy main.py --ignore-missing-imports
+mypy run.py --ignore-missing-imports

@@ -1,13 +1,14 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Boolean, Table
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Boolean
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
+from typing import Any
 
-Base = declarative_base()
+Base: Any = declarative_base()
 
 if __name__ == "__main__":
-    import sqlalchemy
+    from sqlalchemy import create_engine
 
-    engine = sqlalchemy.create_engine("sqlite:///data/twitter.db")
+    engine = create_engine("sqlite:///data/twitter.db")
     Base.metadata.bind = engine
 
 
@@ -32,20 +33,6 @@ class Mention(Base):
     user_id = Column(Integer, nullable=False)  # might not be analysed user
 
 
-interacted_status = Table(
-    "interacted_status",
-    Base.metadata,
-    Column("user_id", Integer, ForeignKey("user.user_id")),  # user_id is current user
-    Column(
-        "status_id", Integer, ForeignKey("status.status_id")
-    ),  # status_id either like, rt or comment been analysed and added to db e.g:
-    # TwitterUser.liked, TwitterUser.chirps (retweets, comments)
-    Column("liked", Boolean, nullable=False),
-    Column("retweeted", Boolean, nullable=False),
-    Column("commented", Boolean, nullable=False),
-)
-
-
 class User(Base):
     __tablename__ = "user"
     user_id = Column(Integer, primary_key=True)
@@ -59,9 +46,17 @@ class User(Base):
         "Status", backref=backref("user"), lazy=True
     )  # either tweets or retweets
     entourage = relationship("Entourage", backref=backref("user"), lazy=True)
-    interacted_tweets = relationship(
-        "Status", secondary=interacted_status, back_populates="user", lazy=True
-    )
+    interacted_tweets = relationship("Interaction", backref=backref("user"), lazy=True)
+
+
+class Interaction(Base):
+    __tablename__ = "interaction"
+    interaction_id = Column("interaction_id", Integer, primary_key=True)
+    user_id = Column("user_id", Integer, ForeignKey("user.user_id"))
+    status_id = Column("status_id", Integer, ForeignKey("status.status_id"))
+    like = Column("like", Boolean, nullable=False)
+    retweet = Column("retweet", Boolean, nullable=False)
+    comment = Column("comment", Boolean, nullable=False)
 
 
 class Entourage(Base):
