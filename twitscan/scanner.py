@@ -1,5 +1,6 @@
+from urllib.parse import uses_relative
 from twitscan.errors import TwitscanError
-from typing import List, Literal, Set
+from typing import List, Literal, Set, Optional
 from datetime import datetime
 
 from tqdm import tqdm
@@ -33,12 +34,29 @@ class TwitterStatus:
             user["id"] for user in twitter_status.entities["user_mentions"]
         ]
 
-        mentions: List[Mention] = [
-            Mention(status_id=self.id, user_id=user_id)
-            for user_id in self.user_mentions
-        ]
-        session.add_all(mentions)
+        self.save_ok = self.save()
 
+    def save(self) -> bool:
+        # check if status exists
+        existing: Optional[Status] = (
+            session.query(Status).filter(Status.status_id == self.id).one_or_none()
+        )
+        if existing is not None:
+            return False
+
+        # if not exists add  mentions and status
+        mentions: List[Mention] = self.to_mentions()
+        status: Status = self.to_status()
+
+        try:
+            session.add_all(mentions)
+            session.add(status)
+            session.commit()
+            return True
+        except:
+            return False
+
+    def to_status(self) -> Status:
         status: Status = Status(
             user_id=self.user_id,
             text=self.text,
@@ -50,8 +68,14 @@ class TwitterStatus:
             in_reply_to_user_id=self.in_reply_to_user_id,
             is_retweet=self.is_retweet,
         )
-        session.add(status)
-        session.commit()
+        return status
+
+    def to_mentions(self) -> List[Mention]:
+        mentions: List[Mention] = [
+            Mention(status_id=self.id, user_id=user_id)
+            for user_id in self.user_mentions
+        ]
+        return mentions
 
     def __str__(self) -> str:
         return f"TwitterStatus(user_id={self.user_id}, id={self.id}, likes={self.favorite_count}, rts={self.retweet_count})"
@@ -66,7 +90,7 @@ class TwitterUser:
     Stores all these records in database
     """
 
-    MAX_TWEETS: Literal[300] = 300
+    MAX_TWEETS: Literal[200] = 200
     if MAX_TWEETS > 3200:
         raise ValueError(
             "Twitter API accepts retrieval of maximum 3200 tweets for each user"
@@ -84,9 +108,11 @@ class TwitterUser:
             )
 
         if user_id:
+            TwitterUser.catch_already_scanned(user_id)
             user: RawUser = api.get_user(user_id=user_id)
         else:
             user = api.get_user(screen_name=screen_name)
+            TwitterUser.catch_already_scanned(user.id)
 
         # basic user information
         self.screen_name: str = user.screen_name
@@ -110,23 +136,13 @@ class TwitterUser:
         self.followers: List[int] = self.get_followers()
 
         # compiling user info and dumping it in database
-        user_info: User = User(
-            user_id=self.id,
-            created_at=self.created_at,
-            verified=self.verified,
-            favorites_count=self.favorites_count,
-            status_count=self.statuses_count,
-            friends_count=self.friends_count,
-            followers_count=self.followers_count,
-        )
-        entourage = self.get_entourage()
-        interactions = self.get_interactions()
+        self.save_ok = self.save()
 
-        session.add(user_info)
-        session.add_all(entourage)
-        session.add_all(interactions)
-
-        session.commit()
+    @staticmethod
+    def catch_already_scanned(user_id: int) -> None:
+        exists = session.query(User).filter(User.user_id == user_id).one_or_none()
+        if exists is not None:
+            raise TwitscanError(f"{user_id} already exists in database")
 
     def debug(self, msg: str) -> None:
         if self.debug_mode:
@@ -219,6 +235,31 @@ class TwitterUser:
             interactions.append(interaction)
         return interactions
 
+    def to_user(self) -> User:
+        user_info: User = User(
+            user_id=self.id,
+            created_at=self.created_at,
+            verified=self.verified,
+            favorites_count=self.favorites_count,
+            status_count=self.statuses_count,
+            friends_count=self.friends_count,
+            followers_count=self.followers_count,
+        )
+        return user_info
+
+    def save(self) -> bool:
+        user_info = self.to_user()
+        entourage = self.get_entourage()
+        interactions = self.get_interactions()
+        try:
+            session.add(user_info)
+            session.add_all(entourage)
+            session.add_all(interactions)
+            session.commit()
+            return True
+        except:
+            return False
+
     def __str__(self) -> str:
         return f"TwitterUser({self.screen_name}, id={self.id})"
 
@@ -237,7 +278,6 @@ class UserScanner(TwitterUser):
         if self.followers_count > UserScanner.MAX_FOLLOWERS:
             raise TwitscanError(
                 f"{self} has more than maximum number of followers allowed for this study: {UserScanner.MAX_FOLLOWERS}",
-                "Either raise the maximum allowed number of followers or remove the user from the scanning list",
             )
         self.user_followers: List[TwitterUser] = self.scan_followers()
 

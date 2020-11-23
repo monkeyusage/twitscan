@@ -1,6 +1,5 @@
 class TwitscanError(Exception):
     """Exception raised for errors specific to scanning"""
 
-    def __init__(self, expression: str, message: str):
-        self.expression = expression
+    def __init__(self, message: str):
         self.message = message
