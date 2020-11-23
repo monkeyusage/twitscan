@@ -1,5 +1,5 @@
 from twitscan.errors import TwitscanError
-from typing import List, Literal
+from typing import List, Literal, Set
 from datetime import datetime
 
 from tqdm import tqdm
@@ -8,7 +8,8 @@ from tweepy.models import User as RawUser
 from tweepy.models import Status as RawStatus
 
 from twitscan import api, session
-from twitscan.models import Status, Mention
+from twitscan.models import Entourage, Status, Mention
+from twitscan.models import interacted_status as Interaction
 
 
 class TwitterStatus:
@@ -34,13 +35,13 @@ class TwitterStatus:
             user["id"] for user in twitter_status.entities["user_mentions"]
         ]
 
-        mentions : List[Mention] = [
+        mentions: List[Mention] = [
             Mention(status_id=self.id, user_id=user_id)
             for user_id in self.user_mentions
         ]
         session.add_all(mentions)
 
-        status : Status = Status(
+        status: Status = Status(
             status_id=self.id,
             created_at=self.created_at,
             favorite_count=self.favorite_count,
@@ -50,6 +51,7 @@ class TwitterStatus:
             is_retweet=self.is_retweet,
         )
         session.add(status)
+        session.commit()
 
     def __str__(self) -> str:
         return f"TwitterStatus(user_id={self.user_id}, id={self.id}, likes={self.favorite_count}, rts={self.retweet_count})"
@@ -67,7 +69,7 @@ class TwitterUser:
         friends (users followed)
     """
 
-    MAX_TWEETS: Literal[500] = 500
+    MAX_TWEETS: Literal[300] = 300
     if MAX_TWEETS > 3200:
         raise ValueError(
             "Twitter API accepts retrieval of maximum 3200 tweets for each user"
@@ -103,7 +105,7 @@ class TwitterUser:
         self.liked: List[TwitterStatus] = self.get_liked()
 
         self.statuses_count: int = user.statuses_count
-        self.tweets: List[TwitterStatus] = self.get_tweets()
+        self.chirps: List[TwitterStatus] = self.get_tweets()
         self.retweets_of_user: List[TwitterStatus] = self.get_retweets()
 
         self.friends_count: int = user.friends_count
@@ -111,6 +113,11 @@ class TwitterUser:
 
         self.followers_count: int = user.followers_count
         self.followers: List[int] = self.get_followers()
+
+        entourage = self.get_entourage()
+        session.add_all(entourage)
+
+        session.commit()
 
     def debug(self, msg: str) -> None:
         if self.debug_mode:
@@ -122,41 +129,33 @@ class TwitterUser:
         favs: List[TwitterStatus] = [TwitterStatus(tweet) for tweet in favorites]
         return favs
 
-    def get_tweets(self) -> List[TwitterStatus]:
+    def get_chirps(self) -> List[TwitterStatus]:
         self.debug(f"Getting tweets for {self}")
         if TwitterUser.MAX_TWEETS <= 200:
             # if we set max tweets under or equal 200 we just throw one request
-            tweets: List[RawStatus] = api.user_timeline(
+            chirps: List[RawStatus] = api.user_timeline(
                 screen_name=self.screen_name,
                 count=200,  # max allowed is 200
-                include_rts=False,
+                include_rts=True,
                 tweet_mode="extended",
             )
         else:
-            # otherwise we throw requests until we get either all tweets or twitter limit being 3200
-            tweets = []
+            # otherwise we throw requests until we get either all chirps or twitter limit being 3200
+            chirps = []
             for older_tweets in Cursor(
                 api.user_timeline,
                 screen_name=self.screen_name,
                 count=200,
-                include_rts=False,
+                include_rts=True,
                 tweet_mode="extended",
             ).pages():
-                tweets.extend(older_tweets)
-                if len(tweets) > TwitterUser.MAX_TWEETS:
+                chirps.extend(older_tweets)
+                if len(chirps) > TwitterUser.MAX_TWEETS:
                     break
         filtered_tweets: List[TwitterStatus] = [
-            TwitterStatus(status) for status in tweets
+            TwitterStatus(status) for status in chirps
         ]
         return filtered_tweets
-
-    def get_retweets(self) -> List[TwitterStatus]:
-        self.debug(f"Getting retweets for {self}")
-        retweets: List[TwitterStatus] = []
-        for tweet in self.tweets:
-            rts = [TwitterStatus(rt) for rt in api.retweets(tweet.id)]
-            retweets.extend(rts)
-        return retweets
 
     def get_friends(self) -> List[int]:
         self.debug(f"Getting friends (followees) for {self}")
@@ -170,6 +169,28 @@ class TwitterUser:
             ids = [user.id for user in page]
             followers.extend(ids)
         return followers
+
+    def get_entourage(self) -> List[Entourage]:
+        followers : Set[int] = set(self.followers) # twitter ids
+        friends : Set[int] = set(self.friends) # twitter ids
+        both  = followers & friends
+        all_entourage = followers | friends        
+        entourage : List[Entourage] = []
+        for e in all_entourage:
+            if e in both:
+                entourage.append(Entourage(user_id=self.id, entourage_id=e, friend=True, follower=True))
+            elif e in followers:
+                entourage.append(Entourage(user_id=self.id, entourage_id=e, friend=False, follower=True))
+            else:
+                entourage.append(Entourage(user_id=self.id, entourage_id=e, friend=True, follower=False))
+        return entourage
+
+    def get_interaction(self) -> List[Interaction]:
+        liked = self.liked
+        retweeted = [chirp for chirp in self.chirps if chirp.is_retweet] 
+        comments = [chirp for chirp in self.chrips if chirp.in_reply_to_status_id]
+        
+        return
 
     def __str__(self) -> str:
         return f"TwitterUser({self.screen_name}, id={self.id})"

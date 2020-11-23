@@ -29,16 +29,20 @@ class Mention(Base):
     __tablename__ = "mention"
     mention_id = Column(Integer, primary_key=True)
     status_id = Column(Integer, ForeignKey("status.status_id"), nullable=False)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False)  # might not be analysed user
 
 
 interacted_status = Table(
     "interacted_status",
     Base.metadata,
-    Column("status_id", Integer, ForeignKey("status.status_id")),
-    Column("user_id", Integer, ForeignKey("user.user_id")),
+    Column("user_id", Integer, ForeignKey("user.user_id")),  # user_id is current user
+    Column(
+        "status_id", Integer, ForeignKey("status.status_id")
+    ),  # status_id either like, rt or comment been analysed and added to db e.g:
+    # TwitterUser.liked, TwitterUser.chirps (retweets, comments)
     Column("liked", Boolean, nullable=False),
     Column("retweeted", Boolean, nullable=False),
+    Column("commented", Boolean, nullable=False),
 )
 
 
@@ -51,26 +55,21 @@ class User(Base):
     status_count = Column(Integer, nullable=False, default=0)
     friends_count = Column(Integer, nullable=False, default=0)
     followers_count = Column(Integer, nullable=False, default=0)
-    tweets = relationship("Status", backref=backref("user"), lazy=True)
-    friends = relationship("Friend", backref=backref("user"), lazy=True)
-    followers = relationship("Follower", backref=backref("user"), lazy=True)
+    chirps = relationship(
+        "Status", backref=backref("user"), lazy=True
+    )  # either tweets or retweets
+    entourage = relationship("Entourage", backref=backref("user"), lazy=True)
     interacted_tweets = relationship(
         "Status", secondary=interacted_status, back_populates="user", lazy=True
     )
 
 
-class Friend(Base):
+class Entourage(Base):
     __tablename__ = "friend"
-    friendship_id = Column(Integer, primary_key=True)
+    entourage_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
-    friend_id = Column(Integer, nullable=False)
-
-
-class Follower(Base):
-    __tablename__ = "follower"
-    followership_id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("user.user_id"))
-    follower_id = Column(Integer, nullable=False)
+    friend = Column(Boolean, nullable=False)  # might not be analysed user
+    follower = Column(Boolean, nullable=False)  # might not be analysed user
 
 
 if __name__ == "__main__":
