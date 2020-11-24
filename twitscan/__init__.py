@@ -1,3 +1,13 @@
+# Twitscan
+# See LICENSE for details.
+
+"""
+Twitscan library
+"""
+__version__ = '0.0.1'
+__author__ = 'monkeyusage'
+__license__ = 'MIT'
+
 from typing import Any, Tuple, Dict
 import tweepy
 from sqlalchemy import create_engine
@@ -21,7 +31,7 @@ engine, session = config_db()
 test_engine, test_session = config_db(test=True)
 
 config: Dict[str, int] = {
-    "MAX_FOLLOWERS": 500,
+    "MAX_FOLLOWERS": 200,
     "MAX_TWEETS": 200,
 }
 

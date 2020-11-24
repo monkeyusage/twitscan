@@ -175,9 +175,14 @@ class TwitterUser:
     def get_followers(self) -> List[int]:
         followers: List[int] = []
         self.debug(f"Fetching followers for {self}")
-        for page in Cursor(api.followers, screen_name=self.screen_name).pages():
+        for page in Cursor(api.followers, screen_name=self.screen_name, limit=config["MAX_FOLLOWERS"]).pages():
             ids = [user.id for user in page]
             followers.extend(ids)
+            if len(followers) >= config["MAX_FOLLOWERS"]:
+                print(
+                    f"WARNING: {str(self)} has too many followers, stopped counting at {len(followers)}"
+                )
+                break
         return followers
 
     def get_entourage(self) -> List[Entourage]:
