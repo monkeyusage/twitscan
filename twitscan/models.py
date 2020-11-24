@@ -36,7 +36,8 @@ class Mention(Base):
 class User(Base):
     __tablename__ = "user"
     user_id = Column(Integer, primary_key=True)
-    created_at = Column(Date)
+    screen_name = Column(String, nullable=False)
+    created_at = Column(Date, nullable=False)
     verified = Column(Boolean, nullable=False)
     favorites_count = Column(Integer, nullable=False)
     status_count = Column(Integer, nullable=False, default=0)
@@ -63,6 +64,7 @@ class Entourage(Base):
     __tablename__ = "friend"
     entourage_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
+    friend_follower_id = Column(Integer, nullable=False)
     friend = Column(Boolean, nullable=False)  # might not be analysed user
     follower = Column(Boolean, nullable=False)  # might not be analysed user
 

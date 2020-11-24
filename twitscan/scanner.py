@@ -1,6 +1,5 @@
-from urllib.parse import uses_relative
-from twitscan.errors import TwitscanError
-from typing import List, Literal, Set, Optional
+from twitscan.errors import TooManyFollowersError
+from typing import List, Set, Optional, Union
 from datetime import datetime
 
 from tqdm import tqdm
@@ -8,7 +7,7 @@ from tweepy import Cursor
 from tweepy.models import User as RawUser
 from tweepy.models import Status as RawStatus
 
-from twitscan import api, session
+from twitscan import api, session, config
 from twitscan.models import Entourage, Status, Mention, Interaction, User
 
 
@@ -90,12 +89,6 @@ class TwitterUser:
     Stores all these records in database
     """
 
-    MAX_TWEETS: Literal[200] = 200
-    if MAX_TWEETS > 3200:
-        raise ValueError(
-            "Twitter API accepts retrieval of maximum 3200 tweets for each user"
-        )
-
     def __init__(
         self,
         user_id: int = None,
@@ -108,11 +101,9 @@ class TwitterUser:
             )
 
         if user_id:
-            TwitterUser.catch_already_scanned(user_id)
             user: RawUser = api.get_user(user_id=user_id)
         else:
             user = api.get_user(screen_name=screen_name)
-            TwitterUser.catch_already_scanned(user.id)
 
         # basic user information
         self.screen_name: str = user.screen_name
@@ -136,13 +127,7 @@ class TwitterUser:
         self.followers: List[int] = self.get_followers()
 
         # compiling user info and dumping it in database
-        self.save_ok = self.save()
-
-    @staticmethod
-    def catch_already_scanned(user_id: int) -> None:
-        exists = session.query(User).filter(User.user_id == user_id).one_or_none()
-        if exists is not None:
-            raise TwitscanError(f"{user_id} already exists in database")
+        self.save()
 
     def debug(self, msg: str) -> None:
         if self.debug_mode:
@@ -156,7 +141,7 @@ class TwitterUser:
 
     def get_chirps(self) -> List[TwitterStatus]:
         self.debug(f"Fetching tweets for {self}")
-        if TwitterUser.MAX_TWEETS <= 200:
+        if config["MAX_TWEETS"] <= 200:
             # if we set max tweets under or equal 200 we just throw one request
             chirps: List[RawStatus] = api.user_timeline(
                 screen_name=self.screen_name,
@@ -175,7 +160,7 @@ class TwitterUser:
                 tweet_mode="extended",
             ).pages():
                 chirps.extend(older_tweets)
-                if len(chirps) > TwitterUser.MAX_TWEETS:
+                if len(chirps) > config["MAX_TWEETS"]:
                     break
         filtered_tweets: List[TwitterStatus] = [
             TwitterStatus(status) for status in chirps
@@ -205,7 +190,10 @@ class TwitterUser:
             is_friend = ff in friends
             is_follower = ff in followers
             person: Entourage = Entourage(
-                user_id=self.id, entourage_id=ff, friend=is_friend, follower=is_follower
+                user_id=self.id,
+                friend_follower_id=ff,
+                friend=is_friend,
+                follower=is_follower,
             )
             persons.append(person)
         return persons
@@ -235,9 +223,10 @@ class TwitterUser:
             interactions.append(interaction)
         return interactions
 
-    def to_user(self) -> User:
+    def _to_user(self) -> User:
         user_info: User = User(
             user_id=self.id,
+            screen_name=self.screen_name,
             created_at=self.created_at,
             verified=self.verified,
             favorites_count=self.favorites_count,
@@ -247,8 +236,8 @@ class TwitterUser:
         )
         return user_info
 
-    def save(self) -> bool:
-        user_info = self.to_user()
+    def save(self) -> None:
+        user_info = self._to_user()
         entourage = self.get_entourage()
         interactions = self.get_interactions()
         try:
@@ -256,9 +245,8 @@ class TwitterUser:
             session.add_all(entourage)
             session.add_all(interactions)
             session.commit()
-            return True
-        except:
-            return False
+        except Exception as err:
+            print(err)
 
     def __str__(self) -> str:
         return f"TwitterUser({self.screen_name}, id={self.id})"
@@ -267,32 +255,45 @@ class TwitterUser:
         return str(self)
 
 
-class UserScanner(TwitterUser):
-    MAX_FOLLOWERS: Literal[100] = 100
-    """Main interface to retrieve data, scans data from user and his/her followers
-    Stores all records in database
+def is_already_scanned(screen_name: str) -> Optional[User]:
+    """If user is in database we don't want to waste our api calls on him/her
+    However if the user is being scanned we still want to scan the followers
     """
+    user: Optional[User] = (
+        session.query(User).filter(User.screen_name == screen_name).one_or_none()
+    )
+    if user is not None:
+        return user
+    return None
 
-    def __init__(self, screen_name: str, debug_mode: bool = False):
-        super().__init__(screen_name=screen_name, debug_mode=debug_mode)
-        if self.followers_count > UserScanner.MAX_FOLLOWERS:
-            raise TwitscanError(
-                f"{self} has more than maximum number of followers allowed for this study: {UserScanner.MAX_FOLLOWERS}",
+
+def scan(user_name: str, debug_mode: bool = False) -> User:
+    maybe_user: Optional[User] = is_already_scanned(user_name)
+    if maybe_user is not None:
+        print(f"Main user {user_name} already in database, fetching for its followers")
+        followers: List[int] = list(
+            map(
+                lambda e: e.friend_follower_id,
+                filter(lambda e: e.follower, maybe_user.entourage),
             )
-        self.user_followers: List[TwitterUser] = self.scan_followers()
+        )
+        user_id: int = maybe_user.user_id
+    else:
+        print(f"Scanning main user {user_name}")
+        scanned_user: TwitterUser = TwitterUser(
+            screen_name=user_name, debug_mode=debug_mode
+        )
+        followers = scanned_user.followers
+        user_id = scanned_user.id
 
-    def scan_followers(self) -> List[TwitterUser]:
-        """parses followers information and stores in Follower attributes"""
-        self.debug(f"\nScanning followers for {self}")
-        user_followers: List[TwitterUser] = [
-            TwitterUser(
-                user_id=follower_id,
-                debug_mode=self.debug_mode,
-            )
-            for follower_id in tqdm(self.followers)
-            if not api.get_user(follower_id).protected
-        ]
-        return user_followers
+    user: User = session.query(User).filter(User.user_id == user_id)
 
-    def __repr__(self):
-        return f"UserScanner({self.screen_name}, id={self.id})"
+    if len(followers) > config["MAX_FOLLOWERS"]:
+        raise TooManyFollowersError(
+            f"Main user {user_name} has too many followers for scannings"
+        )
+
+    for follower_id in followers:
+        TwitterUser(user_id=follower_id, debug_mode=debug_mode)
+
+    return user

@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any, Tuple, Dict
 import tweepy
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,6 +19,15 @@ def config_db(test: bool = False) -> Tuple[Any, Any]:
 
 engine, session = config_db()
 test_engine, test_session = config_db(test=True)
+
+config: Dict[str, int] = {
+    "MAX_FOLLOWERS": 500,
+    "MAX_TWEETS": 200,
+}
+
+assert (
+    config["MAX_TWEETS"] < 3200
+), "Twitter API accepts retrieval of maximum 3200 tweets for each user"
 
 api = tweepy.API(
     auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, compression=True

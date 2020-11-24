@@ -9,7 +9,8 @@ filtered: TwitterStatus = TwitterStatus(status)
 
 print(filtered)
 
+
 class db_tests(unittest.TestCase):
     def setUp(self) -> None:
-        
+
         return
