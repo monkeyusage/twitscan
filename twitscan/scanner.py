@@ -33,7 +33,7 @@ class TwitterStatus:
             user["id"] for user in twitter_status.entities["user_mentions"]
         ]
 
-        self.save_ok = self.save()
+        self.save()
 
     def save(self) -> None:
         # check if status exists
@@ -233,7 +233,7 @@ class TwitterUser:
         user_info = self._to_user()
         entourage = self.get_entourage()
         interactions = self.get_interactions()
-        
+
         session.add(user_info)
         session.add_all(entourage)
         session.add_all(interactions)
@@ -246,7 +246,9 @@ class TwitterUser:
         return str(self)
 
 
-def is_already_scanned(screen_name: Optional[str] = None, user_id:Optional[int]=None) -> Optional[User]:
+def is_already_scanned(
+    screen_name: Optional[str] = None, user_id: Optional[int] = None
+) -> Optional[User]:
     """If user is in database we don't want to waste our api calls on him/her
     However if the user is being scanned we still want to scan the followers
     """
@@ -257,12 +259,11 @@ def is_already_scanned(screen_name: Optional[str] = None, user_id:Optional[int]=
             session.query(User).filter(User.screen_name == screen_name).one_or_none()
         )
     else:
-        user: Optional[User] = (
-            session.query(User).filter(User.user_id == user_id).one_or_none()
-        )
+        user = session.query(User).filter(User.user_id == user_id).one_or_none()
     if user is not None:
         return user
     return None
+
 
 def scan(user_name: str, debug_mode: bool = False) -> User:
     maybe_user: Optional[User] = is_already_scanned(user_name)
@@ -290,10 +291,12 @@ def scan(user_name: str, debug_mode: bool = False) -> User:
             f"Main user {user_name} has too many followers for scannings"
         )
 
-    is_protected : Callable[[int], bool] = lambda user_id: api.get_user(user_id=user_id).protected
+    is_protected: Callable[[int], bool] = lambda user_id: api.get_user(
+        user_id=user_id
+    ).protected
 
     for follower_id in tqdm(followers):
-        if is_already_scanned(user_id=follower_id) or is_protected(user_id=follower_id):
+        if is_already_scanned(user_id=follower_id) or is_protected(follower_id):
             print(f"User {follower_id} already in database or protected")
             continue
         TwitterUser(user_id=follower_id, debug_mode=debug_mode)
