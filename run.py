@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
-from twitscan.models import User
-from twitscan.errors import TwitscanError
+from twitscan.errors import TooManyFollowersError
 from twitscan.scanner import scan
 from twitscan import session
 
@@ -14,5 +13,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         scan(args.user, debug_mode=args.debug)
-    except TwitscanError as err:
+    except TooManyFollowersError as err:
         print(f"Caught error: {err}")
