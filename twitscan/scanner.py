@@ -35,25 +35,21 @@ class TwitterStatus:
 
         self.save_ok = self.save()
 
-    def save(self) -> bool:
+    def save(self) -> None:
         # check if status exists
-        existing: Optional[Status] = (
+        existing_status: Optional[Status] = (
             session.query(Status).filter(Status.status_id == self.id).one_or_none()
         )
-        if existing is not None:
-            return False
+        if existing_status is not None:
+            return
 
         # if not exists add  mentions and status
         mentions: List[Mention] = self.to_mentions()
         status: Status = self.to_status()
 
-        try:
-            session.add_all(mentions)
-            session.add(status)
-            session.commit()
-            return True
-        except:
-            return False
+        session.add_all(mentions)
+        session.add(status)
+        session.commit()
 
     def to_status(self) -> Status:
         status: Status = Status(
@@ -173,16 +169,8 @@ class TwitterUser:
         return friends
 
     def get_followers(self) -> List[int]:
-        followers: List[int] = []
         self.debug(f"Fetching followers for {self}")
-        for page in Cursor(api.followers, screen_name=self.screen_name, limit=config["MAX_FOLLOWERS"]).pages():
-            ids = [user.id for user in page]
-            followers.extend(ids)
-            if len(followers) >= config["MAX_FOLLOWERS"]:
-                print(
-                    f"WARNING: {str(self)} has too many followers, stopped counting at {len(followers)}"
-                )
-                break
+        followers: List[int] = api.followers_ids(self.id)
         return followers
 
     def get_entourage(self) -> List[Entourage]:
