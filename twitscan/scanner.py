@@ -101,6 +101,8 @@ class TwitterUser:
         self.screen_name = self._user.screen_name
         self.id = self._user.user_id
 
+        self.setup()
+
     @staticmethod
     def _scan(user_id: Optional[int], screen_name: Optional[str]) -> User:
         """Checks if user is already scanned, if so retrieves user else scans user from twitter"""
@@ -316,6 +318,13 @@ class TwitterUser:
             .all()
         )
         return user_followers_ids & other_followers_ids
+
+    def setup(self) -> None:
+        """set user attributes"""
+        self.stats = self.get_stats()
+        self.friends = self.get_friends()
+        self.followers = self.get_followers()
+        self.entourage = self.get_entourage()
 
     def __str__(self) -> str:
         return f"TwitterUser({self.screen_name}, id={self.id})"

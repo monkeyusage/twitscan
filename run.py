@@ -12,7 +12,7 @@ parser.add_argument(
 if __name__ == "__main__":
     args = parser.parse_args()
     main_user = TwitterUser(screen_name=args.user, debug_mode=args.debug)
-    followers = main_user.get_followers()
+    followers = main_user.followers
     for follower_id in tqdm(followers):
         try:
             TwitterUser(user_id=follower_id, debug_mode=args.debug)
