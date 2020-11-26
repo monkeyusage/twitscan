@@ -1,5 +1,6 @@
 import logging
-from typing import List, Set, Optional
+from os import stat
+from typing import List, Set, Optional, Dict, Any
 from datetime import datetime
 
 from tqdm import tqdm
@@ -97,51 +98,84 @@ class TwitterUser:
         else:
             logging.basicConfig(level=logging.INFO)
 
+        self._user = TwitterUser._scan(user_id=user_id, screen_name=screen_name)
+        self.screen_name = self._user.screen_name
+        self.id = self._user.user_id
+
+    @staticmethod
+    def _scan(user_id: Optional[int], screen_name: Optional[str]) -> User:
+        """Checks if user is already scanned, if so retrieves user else scans user from twitter"""
         user: Optional[User] = TwitterUser.check_user(
             user_id=user_id, screen_name=screen_name
         )
         if user is None:
             logging.info(
-                f"Scanning user : {screen_name if screen_name else user_id}"
+                f"Scanning user : {screen_name if screen_name else user_id} from twitter"
             )
-            raw_user: RawUser = self.scan(user_id=user_id, screen_name=screen_name) # scan and post to db
-            self._user: User = session.query(User).filter(User.user_id == raw_user.id).first() # get from db
+            db_user: User = TwitterUser._scan_twitter(user_id=user_id, screen_name=screen_name)
+            return db_user
         else:
-            logging.info(f"User {user.screen_name} already in database")
-            self._user = user # assign value retrieved from db by check_user
+            logging.info(
+                f"User {user.screen_name} already in database, scanning from db"
+            )
+            return user
 
-        self.screen_name = self._user.screen_name
-        self.id = self._user.user_id
-
-    def scan(self, user_id: Optional[int], screen_name: Optional[str]) -> RawUser:
+    @staticmethod
+    def _scan_twitter(user_id: Optional[int], screen_name: Optional[str]) -> User:
+        """Fetches user from twitter, Saves it in db and queries db for user"""
         # fetch user from twitter
         user: RawUser = (
             api.get_user(screen_name=screen_name)
             if screen_name
             else api.get_user(user_id=user_id)
         )
-        # requesting and compiling user info from tweeter then dumping it in database
-        self._save(user)
-        return user
+        TwitterUser._save(user)  # add user to database
+        db_user: User = session.query(User).filter(
+            User.user_id == user.id
+        ).first()  # query User from database
+        return db_user
 
-    def _add_user(self, user: RawUser) -> None:
-        logging.debug(f"Adding {self} to database")
+    @staticmethod
+    def check_user(
+        screen_name: Optional[str] = None, user_id: Optional[int] = None
+    ) -> Optional[User]:
+        """Checks if user is in database, if so returns it otherwise returns None"""
+        if screen_name:
+            user: Optional[User] = (
+                session.query(User)
+                .filter(User.screen_name == screen_name)
+                .one_or_none()
+            )
+        else:
+            user = session.query(User).filter(User.user_id == user_id).one_or_none()
+        if user is not None:
+            return user
+        return None
+
+    @staticmethod
+    def _add_user(user: RawUser) -> None:
+        """Uses Tweepy User to create and push user info to db"""
+        logging.debug(f"Adding {user.screen_name} to database")
         user_info: User = User(
             user_id=user.id,
             screen_name=user.screen_name,
             created_at=user.created_at,
             verified=user.verified,
-            favorites_count=user.favorites_count,
+            favorites_count=user.favourites_count,
             status_count=user.statuses_count,
             friends_count=user.friends_count,
             followers_count=user.followers_count,
         )
         session.add(user_info)
 
-    def _add_entouage(self, user: RawUser) -> None:
-        logging.debug(f"Fetching friends (followees) for {self}")
+    @staticmethod
+    def _add_entouage(user: RawUser) -> None:
+        """Calls twitter api to get friends and followers
+        Pushes those ids in user's entourage
+        """
+        logging.debug(f"Fetching friends (followees) for {user.screen_name}")
         friends: Set[int] = set(api.friends_ids(user.id))
-        logging.debug(f"Fetching followers for {self}")
+        logging.debug(f"Fetching followers for {user.screen_name}")
         followers: Set[int] = set(api.followers_ids(user.id))
 
         friends_followers = followers | friends
@@ -159,8 +193,12 @@ class TwitterUser:
 
         session.add_all(persons)
 
-    def _add_interactions(self, user: RawUser) -> None:
-        logging.debug(f"Fetching tweets for {self}")
+    @staticmethod
+    def _add_interactions(user: RawUser) -> None:
+        """Uses twitter api to get latest tweets and retweets / comments / likes
+        Stores user's related interactions in database
+        """
+        logging.debug(f"Fetching tweets for {user.screen_name}")
         chirps: List[TwitterStatus] = [
             TwitterStatus(status)
             for status in api.user_timeline(
@@ -171,7 +209,7 @@ class TwitterUser:
             )
         ]
 
-        logging.debug(f"Fetching favorites for {self}")
+        logging.debug(f"Fetching favorites for {user.screen_name}")
         liked: Set[int] = set(
             [TwitterStatus(tweet).id for tweet in api.favorites(user.screen_name)]
         )
@@ -198,36 +236,86 @@ class TwitterUser:
 
         session.add_all(interactions)
 
-    def _save(self, user: RawUser) -> None:
+    @staticmethod
+    def _save(user: RawUser) -> None:
+        """Uses tweepy User to add it into db aswell as its entourage and interactions"""
         logging.debug(f"Adding user related information to database")
 
-        self._add_user(user)
-        self._add_entouage(user)
-        self._add_interactions(user)
+        TwitterUser._add_user(user)
+        TwitterUser._add_entouage(user)
+        TwitterUser._add_interactions(user)
 
         session.commit()
+
+    def get_stats(self) -> Dict[str, int]:
+        """Retrieves basic stats from User database"""
+        stats: Dict[str, Any] = {
+            "n_tweets": len(self._user.chirps),
+            "n_followers": self._user.followers_count,
+            "n_friends": self._user.friends_count,
+            "n_favorites": self._user.favorites_count,
+            "n_retweets": len(
+                list(filter(lambda inter: inter.retweet, self._user.interacted_tweets))
+            ),
+            "n_comments": len(
+                list(filter(lambda inter: inter.comment, self._user.interacted_tweets))
+            ),
+        }
+        return stats
+
+    def get_friends(self, other_user: Optional[User] = None) -> Set[int]:
+        user: User = self._user if other_user is None else other_user
+        friends: Set[int] = set(
+            map(
+                lambda e: e.friend_follower_id,
+                filter(lambda e: e.friend, user.entourage),
+            )
+        )
+        return friends
+
+    def get_followers(self, other_user: Optional[User] = None) -> Set[int]:
+        user: User = self._user if other_user is None else other_user
+        followers: Set[int] = set(
+            map(
+                lambda e: e.friend_follower_id,
+                filter(lambda e: e.follower, user.entourage),
+            )
+        )
+        return followers
+
+    def get_entourage(self, other_user: Optional[User] = None) -> Set[int]:
+        user: User = self._user if other_user is None else other_user
+        entourage: Set[int] = set(map(lambda e: e.friend_follower_id, user.entourage))
+        return entourage
+
+    def get_common_entourage(self, other_user_id: int) -> Set[int]:
+        """Retrieve user's entourage and others entourage and compare"""
+        user_ff_ids: Set[int] = self.get_entourage()
+        other_user: Optional[User] = TwitterUser.check_user(user_id=other_user_id)
+        assert other_user is not None, "Other user not in database"
+        other_ff_ids: Set[int] = self.get_entourage(other_user)
+        return user_ff_ids & other_ff_ids
+
+    def get_common_friends(self, other_user_id: int) -> Set[int]:
+        """Retrieves user's friends and other's friends and compare"""
+        user_friends_ids: Set[int] = self.get_friends()
+        other_user: Optional[User] = TwitterUser.check_user(user_id=other_user_id)
+        assert other_user is not None, "Other user not in database"
+        other_friends_ids: Set[int] = self.get_friends(other_user)
+        return user_friends_ids & other_friends_ids
+
+    def get_common_followers(self, other_user_id: int) -> Set[int]:
+        """Retrieves user's followers and other's followers and compare"""
+        user_followers_ids: Set[int] = self.get_followers()
+        other_followers_ids: Set[int] = set(
+            session.query(Entourage.friend_follower_id)
+            .filter(Entourage.user_id == other_user_id, Entourage.follower is True)
+            .all()
+        )
+        return user_followers_ids & other_followers_ids
 
     def __str__(self) -> str:
         return f"TwitterUser({self.screen_name}, id={self.id})"
 
     def __repr__(self) -> str:
         return str(self)
-
-    @staticmethod
-    def check_user(
-        screen_name: Optional[str] = None, user_id: Optional[int] = None
-    ) -> Optional[User]:
-        """If user is in database we don't want to waste our api calls on him/her
-        However if the user is being scanned we still want to scan the followers
-        """
-        if screen_name:
-            user: Optional[User] = (
-                session.query(User)
-                .filter(User.screen_name == screen_name)
-                .one_or_none()
-            )
-        else:
-            user = session.query(User).filter(User.user_id == user_id).one_or_none()
-        if user is not None:
-            return user
-        return None
