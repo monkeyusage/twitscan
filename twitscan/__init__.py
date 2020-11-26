@@ -36,7 +36,7 @@ config: Dict[str, int] = {
 }
 
 assert (
-    config["MAX_TWEETS"] < 3200
+    config["MAX_TWEETS"] < 200
 ), "Twitter API accepts retrieval of maximum 3200 tweets for each user"
 
 api = tweepy.API(

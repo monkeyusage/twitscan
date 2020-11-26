@@ -87,8 +87,8 @@ class TwitterUser:
 
     def __init__(
         self,
-        user_id: int = None,
-        screen_name: str = None,
+        user_id: Optional[int] = None,
+        screen_name: Optional[str] = None,
         debug_mode: bool = False,
     ):
         if (not screen_name) and (not user_id):
@@ -96,109 +96,73 @@ class TwitterUser:
                 "screen_name or user_id must be entered when creating a TwitterUser"
             )
 
-        if user_id:
-            user: RawUser = api.get_user(user_id=user_id)
-        else:
-            user = api.get_user(screen_name=screen_name)
-
-        # basic user information
-        self.screen_name: str = user.screen_name
-        self.id: int = user.id
-        self.created_at: datetime = user.created_at
-        self.verified: bool = user.verified
-
-        # utility attributes
         self.debug_mode: bool = debug_mode
 
-        # given statistics for all users
-        self.favorites_count: int = user.favourites_count
-        self.statuses_count: int = user.statuses_count
-        self.friends_count: int = user.friends_count
-        self.followers_count: int = user.followers_count
+        if user := self.is_already_scanned(user_id=user_id, screen_name=screen_name, debug_mode=debug_mode) is not None:
+            self.scan()
 
-        # information that requires api calls
-        self.liked: List[TwitterStatus] = self.get_liked()
-        self.chirps: List[TwitterStatus] = self.get_chirps()
-        self.friends: List[int] = self.get_friends()
-        self.followers: List[int] = self.get_followers()
-
-        # compiling user info and dumping it in database
-        self.save()
+        self.screen_name = user.screen_name
 
     def debug(self, msg: str) -> None:
         if self.debug_mode:
             print(msg)
 
-    def get_liked(self) -> List[TwitterStatus]:
-        self.debug(f"Fetching favorites for {self}")
-        favorites = api.favorites(self.screen_name)
-        favs: List[TwitterStatus] = [TwitterStatus(tweet) for tweet in favorites]
-        return favs
-
-    def get_chirps(self) -> List[TwitterStatus]:
-        self.debug(f"Fetching tweets for {self}")
-        if config["MAX_TWEETS"] <= 200:
-            # if we set max tweets under or equal 200 we just throw one request
-            chirps: List[RawStatus] = api.user_timeline(
-                screen_name=self.screen_name,
-                count=200,  # max allowed is 200
-                include_rts=True,
-                tweet_mode="extended",
-            )
+    def scan(self, user_id:Optional[int], screen_name:Optional[str]) -> None:
+        # fetch user from twitter
+        if user_id:
+            user: RawUser = api.get_user(user_id=user_id)
         else:
-            # otherwise we throw requests until we get either all chirps or twitter limit being 3200
-            chirps = []
-            for older_tweets in Cursor(
-                api.user_timeline,
-                screen_name=self.screen_name,
-                count=200,
-                include_rts=True,
-                tweet_mode="extended",
-            ).pages():
-                chirps.extend(older_tweets)
-                if len(chirps) > config["MAX_TWEETS"]:
-                    break
-        filtered_tweets: List[TwitterStatus] = [
-            TwitterStatus(status) for status in chirps
-        ]
-        return filtered_tweets
+            user = api.get_user(screen_name=screen_name)
+        # requesting and compiling user info from tweeter then dumping it in database
+        TwitterUser._save(user)
 
-    def get_friends(self) -> List[int]:
-        self.debug(f"Fetching friends (followees) for {self}")
-        friends: List[int] = api.friends_ids(self.id)
-        return friends
+    @staticmethod
+    def _add_user(user:RawUser) -> None:
+        user_info: User = User(
+            user_id=user.id,
+            screen_name=user.screen_name,
+            created_at=user.created_at,
+            verified=user.verified,
+            favorites_count=user.favorites_count,
+            status_count=user.statuses_count,
+            friends_count=user.friends_count,
+            followers_count=user.followers_count,
+        )
+        session.add(user_info)
 
-    def get_followers(self) -> List[int]:
-        self.debug(f"Fetching followers for {self}")
-        followers: List[int] = api.followers_ids(self.id)
-        return followers
-
-    def get_entourage(self) -> List[Entourage]:
-        followers: Set[int] = set(self.followers)  # twitter ids
-        friends: Set[int] = set(self.friends)  # twitter ids
-
+    @staticmethod
+    def _add_entouage(user) -> None:
+        print(f"Fetching friends (followees) for {user.screen_name}")
+        friends: Set[int] = set(api.friends_ids(user.id))
+        print(f"Fetching followers for {user.screen_name}")
+        followers: Set[int] = set(api.followers_ids(user.id))
+        
         friends_followers = followers | friends
         persons: List[Entourage] = []
         for ff in friends_followers:
             is_friend = ff in friends
             is_follower = ff in followers
             person: Entourage = Entourage(
-                user_id=self.id,
+                user_id=user.id,
                 friend_follower_id=ff,
                 friend=is_friend,
                 follower=is_follower,
             )
             persons.append(person)
-        return persons
+        
+        session.add_all(persons)
 
-    def get_interactions(self) -> List[Interaction]:
-        liked: Set[int] = set([like.id for like in self.liked])
-        retweeted: Set[int] = set(
-            [chirp.id for chirp in self.chirps if chirp.is_retweet]
-        )
-        comments: Set[int] = set(
-            [chirp.id for chirp in self.chirps if chirp.in_reply_to_status_id]
-        )
+    @staticmethod
+    def _add_interactions(user:RawUser) -> None:
+        print(f"Fetching tweets for {user.screen_name}")
+        chirps : List[TwitterStatus] = [TwitterStatus(status) for status in api.user_timeline(screen_name=user.screen_name, count=config["MAX_TWEETS"],  include_rts=True,tweet_mode="extended",)]
+
+        print(f"Fetching favorites for {user.screen_name}")
+        liked : Set[int] = set([TwitterStatus(tweet).id for tweet in api.favorites(user.screen_name)])
+
+
+        retweeted: Set[int] = set([chirp.id for chirp in chirps if chirp.is_retweet])
+        comments: Set[int] = set([chirp.id for chirp in chirps if chirp.in_reply_to_status_id])
 
         statuses = liked | retweeted | comments
         interactions: List[Interaction] = []
@@ -207,36 +171,22 @@ class TwitterUser:
             is_retweet = status in retweeted
             is_comment = status in comments
             interaction = Interaction(
-                user_id=self.id,
+                user_id=user.id,
                 status_id=status,
                 like=is_like,
                 retweet=is_retweet,
                 comment=is_comment,
             )
             interactions.append(interaction)
-        return interactions
-
-    def _to_user(self) -> User:
-        user_info: User = User(
-            user_id=self.id,
-            screen_name=self.screen_name,
-            created_at=self.created_at,
-            verified=self.verified,
-            favorites_count=self.favorites_count,
-            status_count=self.statuses_count,
-            friends_count=self.friends_count,
-            followers_count=self.followers_count,
-        )
-        return user_info
-
-    def save(self) -> None:
-        user_info = self._to_user()
-        entourage = self.get_entourage()
-        interactions = self.get_interactions()
-
-        session.add(user_info)
-        session.add_all(entourage)
+        
         session.add_all(interactions)
+
+    @staticmethod
+    def _save(user:RawUser) -> None:
+        TwitterUser._add_user(user)
+        TwitterUser._add_entouage(user)
+        TwitterUser._add_interactions(user)
+
         session.commit()
 
     def __str__(self) -> str:
@@ -245,24 +195,23 @@ class TwitterUser:
     def __repr__(self) -> str:
         return str(self)
 
-
-def is_already_scanned(
-    screen_name: Optional[str] = None, user_id: Optional[int] = None
-) -> Optional[User]:
-    """If user is in database we don't want to waste our api calls on him/her
-    However if the user is being scanned we still want to scan the followers
-    """
-    if (screen_name is None) and (user_id is None):
-        raise ValueError("Cannot query user, not screen_name or user_id given")
-    if screen_name:
-        user: Optional[User] = (
-            session.query(User).filter(User.screen_name == screen_name).one_or_none()
-        )
-    else:
-        user = session.query(User).filter(User.user_id == user_id).one_or_none()
-    if user is not None:
-        return user
-    return None
+    def is_already_scanned(
+        screen_name: Optional[str] = None, user_id: Optional[int] = None
+    ) -> Optional[User]:
+        """If user is in database we don't want to waste our api calls on him/her
+        However if the user is being scanned we still want to scan the followers
+        """
+        if (screen_name is None) and (user_id is None):
+            raise ValueError("Cannot query user, not screen_name or user_id given")
+        if screen_name:
+            user: Optional[User] = (
+                session.query(User).filter(User.screen_name == screen_name).one_or_none()
+            )
+        else:
+            user = session.query(User).filter(User.user_id == user_id).one_or_none()
+        if user is not None:
+            return user
+        return None
 
 
 def scan(user_name: str, debug_mode: bool = False) -> User:
