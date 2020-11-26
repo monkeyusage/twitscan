@@ -1,9 +1,8 @@
 import logging
-from os import stat
+from twitscan.errors import UserProtectedError
 from typing import List, Set, Optional, Dict, Any
 from datetime import datetime
 
-from tqdm import tqdm
 from tweepy.models import User as RawUser
 from tweepy.models import Status as RawStatus
 
@@ -112,7 +111,9 @@ class TwitterUser:
             logging.info(
                 f"Scanning user : {screen_name if screen_name else user_id} from twitter"
             )
-            db_user: User = TwitterUser._scan_twitter(user_id=user_id, screen_name=screen_name)
+            db_user: User = TwitterUser._scan_twitter(
+                user_id=user_id, screen_name=screen_name
+            )
             return db_user
         else:
             logging.info(
@@ -129,10 +130,12 @@ class TwitterUser:
             if screen_name
             else api.get_user(user_id=user_id)
         )
+        if user.protected:
+            raise UserProtectedError(f"User {user.screen_name} is protected")
         TwitterUser._save(user)  # add user to database
-        db_user: User = session.query(User).filter(
-            User.user_id == user.id
-        ).first()  # query User from database
+        db_user: User = (
+            session.query(User).filter(User.user_id == user.id).first()
+        )  # query User from database
         return db_user
 
     @staticmethod
