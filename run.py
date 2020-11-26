@@ -10,9 +10,9 @@ parser.add_argument(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    with open('data/users.txt', 'r') as file:
+    with open("data/users.txt", "r") as file:
         users = file.read().split("\n")
-    
+
     for user in users:
         try:
             twitter_user = TwitterUser(screen_name=user, debug_mode=args.debug)
