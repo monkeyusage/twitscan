@@ -1,5 +1,6 @@
 import logging
 from tweepy.models import User as RawUser
+from tweepy.models import Status as RawStatus
 from twitscan import api, session, config
 from twitscan.models import Entourage, Interaction, User
 from twitscan import status
@@ -7,13 +8,14 @@ from twitscan.errors import UserProtectedError
 
 from typing import Optional, Set, List
 
-def check_user(screen_name: Optional[str] = None, user_id: Optional[int] = None) -> Optional[User]:
+
+def check_user(
+    screen_name: Optional[str] = None, user_id: Optional[int] = None
+) -> Optional[User]:
     """Checks if user is in database, if so returns it otherwise returns None"""
     if screen_name:
         user: Optional[User] = (
-            session.query(User)
-            .filter(User.screen_name == screen_name)
-            .one_or_none()
+            session.query(User).filter(User.screen_name == screen_name).one_or_none()
         )
     else:
         user = session.query(User).filter(User.user_id == user_id).one_or_none()
@@ -21,40 +23,39 @@ def check_user(screen_name: Optional[str] = None, user_id: Optional[int] = None)
         return user
     return None
 
+
 def scan_twitter(user_id: Optional[int], screen_name: Optional[str]) -> None:
     """Fetches user from twitter, Saves it in db and queries db for user"""
     # fetch user from twitter
-    user: RawUser = (
+    raw_user: RawUser = (
         api.get_user(screen_name=screen_name)
         if screen_name
         else api.get_user(user_id=user_id)
     )
-    if user.protected:
+    if raw_user.protected:
         raise UserProtectedError(f"User {user.screen_name} is protected")
-    save(user)  # add user to database
-    
+    return save(raw_user)  # add user to database
+
+
 def scan(user_id: Optional[int], screen_name: Optional[str]) -> User:
     """Checks if user is already scanned, if so retrieves user else scans user from twitter"""
     assert not (
         (user_id is None) and (screen_name is None)
     ), "Both identifiers for User are None"
 
-    user: Optional[User] = check_user(
-        user_id=user_id, screen_name=screen_name
-    )
+    maybe_user: Optional[User] = check_user(user_id=user_id, screen_name=screen_name)
     if user is None:
         logging.info(
             f"Scanning user : {screen_name if screen_name else user_id} from twitter"
         )
-        db_user: User = TwitterUser._scan_twitter(
-            user_id=user_id, screen_name=screen_name
-        )
+        db_user: User = scan_twitter(user_id=user_id, screen_name=screen_name)
         return db_user
     else:
         logging.info(
-            f"User {user.screen_name} already in database, scanning from db"
+            f"User {maybe_user.screen_name} already in database, scanning from db"
         )
-        return user
+        return maybe_user
+
 
 def add_entouage(user: RawUser) -> None:
     """Calls twitter api to get friends and followers
@@ -80,13 +81,14 @@ def add_entouage(user: RawUser) -> None:
 
     session.add_all(persons)
 
-def _add_interactions(user: RawUser) -> None:
+
+def add_interactions(user: RawUser) -> None:
     """Uses twitter api to get latest tweets and retweets / comments / likes
     Stores user's related interactions in database
     """
     logging.debug(f"Fetching tweets for {user.screen_name}")
-    chirps: List[TwitterStatus] = [
-        TwitterStatus(status)
+    chirps: List[RawStatus] = [
+        save(status)
         for status in api.user_timeline(
             screen_name=user.screen_name,
             count=config["MAX_TWEETS"],
@@ -123,7 +125,7 @@ def _add_interactions(user: RawUser) -> None:
     session.add_all(interactions)
 
 
-def save(user:RawUser, debug_mode:bool=False) -> None:
+def save(user: RawUser, debug_mode: bool = False) -> RawUser:
     if debug_mode:
         logging.basicConfig(level=logging.DEBUG)
     else:
@@ -143,3 +145,4 @@ def save(user:RawUser, debug_mode:bool=False) -> None:
     )
     session.add(user_info)
 
+    return user

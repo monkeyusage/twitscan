@@ -1,19 +1,21 @@
-from tweepy.models import RawStatus
+from tweepy.models import Status as RawStatus
 from twitscan.models import Status, Mention
 from twitscan import session
 from typing import Optional, List
 
-def exists(raw_status:RawStatus) -> bool:
+
+def exists(raw_status: RawStatus) -> bool:
     existing_status: Optional[Status] = (
-            session.query(Status).filter(Status.status_id == raw_status.id).one_or_none()
+        session.query(Status).filter(Status.status_id == raw_status.id).one_or_none()
     )
     if existing_status is not None:
         return True
     return False
 
-def save_status(raw_status:RawStatus) -> None:
+
+def save_status(raw_status: RawStatus) -> RawStatus:
     if exists(raw_status):
-        return
+        return raw_status
     status: Status = Status(
         user_id=raw_status.user_id,
         text=raw_status.text,
@@ -33,3 +35,5 @@ def save_status(raw_status:RawStatus) -> None:
     session.add(status)
     session.add_all(mentions)
     session.add()
+
+    return raw_status
