@@ -1,4 +1,4 @@
-from typing import List, Set
+from typing import List, Set, Optional
 from twitscan import session
 from twitscan.models import (
     Entourage,
@@ -79,7 +79,7 @@ def all_hashtags() -> List[Hashtag]:
     return session.query(Hashtag).all()
 
 
-def by_screen_name(screen_name: str) -> TwitscanUser:
+def by_screen_name(screen_name: str) -> Optional[TwitscanUser]:
     """queries user by screen name"""
     return (
         session.query(TwitscanUser)
@@ -95,3 +95,7 @@ def hashtags_used(user: TwitscanUser) -> Set[Hashtag]:
         hashtags = list(map(lambda hashtag: hashtag.hashtag_name, chirp.hashtags))
         used_ht.update(hashtags)
     return used_ht
+
+
+def by_status_id(status_id:int) -> Optional[TwitscanStatus]:
+    return session.query(TwitscanStatus).filter(TwitscanStatus.status_id == status_id).first()

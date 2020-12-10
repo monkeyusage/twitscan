@@ -18,7 +18,7 @@ from twitscan.models import (
 
 def check_status(raw_status: Status) -> Optional[TwitscanStatus]:
     """Check if status id is in database
-    Return True if yes else return False
+    Return status if yes else return None
     """
     existing_status: Optional[TwitscanStatus] = (
         session.query(TwitscanStatus)
