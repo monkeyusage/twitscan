@@ -1,12 +1,83 @@
 import logging
 from typing import List, Optional, Set
 
-from tweepy.models import User
+from tweepy.models import Status, User
 
 from twitscan import api, config, session
 from twitscan.errors import UserProtectedError
-from twitscan.models import Entourage, Interaction, TwitscanStatus, TwitscanUser
-from twitscan.status import save_status
+from twitscan.models import (
+    Entourage,
+    Hashtag,
+    Interaction,
+    Link,
+    Mention,
+    TwitscanStatus,
+    TwitscanUser,
+)
+
+
+def check_status(raw_status: Status) -> Optional[TwitscanStatus]:
+    """Check if status id is in database
+    Return True if yes else return False
+    """
+    existing_status: Optional[TwitscanStatus] = (
+        session.query(TwitscanStatus)
+        .filter(TwitscanStatus.status_id == raw_status.id)
+        .one_or_none()
+    )
+    if existing_status is not None:
+        return existing_status
+    return None
+
+
+def save_status(raw_status: Status) -> TwitscanStatus:
+    """Save the tweepy status in database if does not exist
+    Add mentions in database if they exist
+    Return it anyway
+    """
+    existing_status = check_status(raw_status)
+    if existing_status is not None:
+        return existing_status
+
+    is_retweet: bool = True if hasattr(raw_status, "retweeted_status") else False
+    text: str = (
+        raw_status.full_text if hasattr(raw_status, "full_text") else raw_status.text
+    )
+    status: TwitscanStatus = TwitscanStatus(
+        user_id=raw_status.user.id,
+        text=text,
+        status_id=raw_status.id,
+        created_at=raw_status.created_at,
+        favorite_count=raw_status.favorite_count,
+        retweet_count=raw_status.retweet_count,
+        in_reply_to_status_id=raw_status.in_reply_to_status_id,
+        in_reply_to_user_id=raw_status.in_reply_to_user_id,
+        is_retweet=is_retweet,
+    )
+
+    mentions: List[Mention] = [
+        Mention(status_id=raw_status.id, user_id=user["id"])
+        for user in raw_status.entities["user_mentions"]
+    ]
+
+    urls: List[Link] = [
+        Link(status_id=raw_status.id, link=url["expanded_url"])
+        for url in raw_status.entities["urls"]
+    ]
+
+    tags: List[Hashtag] = [
+        Hashtag(status_id=raw_status.id, hashtag_name=hashtag["text"])
+        for hashtag in raw_status.entities["hashtags"]
+    ]
+
+    session.add(status)
+    session.add_all(mentions)
+    session.add_all(urls)
+    session.add_all(tags)
+
+    session.commit()
+
+    return status
 
 
 def check_user(
@@ -153,47 +224,11 @@ def save_user(user: User) -> TwitscanUser:
     save_entourage(user)
     save_interactions(user)
 
-    full_user: TwitscanUser = (
+    session.commit()
+
+    full_user: Optional[TwitscanUser] = (
         session.query(TwitscanUser).filter(TwitscanUser.user_id == user.id).first()
     )
+    assert full_user is not None, "Could retrieve user from database after saving it"
+
     return full_user
-
-
-def get_followers(user: TwitscanUser) -> List[int]:
-    return list(
-        map(
-            lambda e: e.friend_follower_id,
-            filter(lambda e: e.follower, user.entourage),
-        )
-    )
-
-
-def get_friends(user: TwitscanUser) -> List[int]:
-    return list(
-        map(
-            lambda e: e.friend_follower_id,
-            filter(lambda e: e.friend, user.entourage),
-        )
-    )
-
-
-def get_entourage(user: TwitscanUser) -> List[int]:
-    return list(map(lambda e: e.e.friend_follower_id, user.entourage))
-
-
-def get_common_followers(user_a: TwitscanUser, user_b: TwitscanUser) -> Set[int]:
-    followers_a: Set[int] = set(get_followers(user_a))
-    followers_b: Set[int] = set(get_followers(user_b))
-    return followers_a & followers_b
-
-
-def get_common_friends(user_a: TwitscanUser, user_b: TwitscanUser) -> Set[int]:
-    friends_a: Set[int] = set(get_friends(user_a))
-    friends_b: Set[int] = set(get_friends(user_b))
-    return friends_a & friends_b
-
-
-def get_common_entourage(user_a: TwitscanUser, user_b: TwitscanUser) -> Set[int]:
-    entourage_a: Set[int] = set(get_entourage(user_a))
-    entourage_b: Set[int] = set(get_entourage(user_b))
-    return entourage_a & entourage_b

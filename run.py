@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from twitscan.errors import UserProtectedError
 from twitscan.models import TwitscanUser
-from twitscan.user import scan, get_followers
+from twitscan import scanner, query, session
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -26,13 +26,15 @@ if __name__ == "__main__":
 
     for user in users:
         try:
-            twitter_user: TwitscanUser = scan(screen_name=user)
+            twitter_user: TwitscanUser = scanner.scan(screen_name=user)
         except UserProtectedError:
             print(f"Main user {user} is protected")
             continue
-        followers: List[int] = get_followers(twitter_user)
+        followers: List[int] = query.followers(twitter_user)
         for follower_id in tqdm(followers):
             try:
-                scan(user_id=follower_id)
+                scanner.scan(user_id=follower_id)
             except UserProtectedError as err:
                 print(err)
+            except KeyboardInterrupt:
+                session.close()
