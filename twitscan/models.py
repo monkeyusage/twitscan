@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Boolean
-from sqlalchemy.orm import relationship, backref
-from sqlalchemy.ext.declarative import declarative_base
 from typing import Any
+
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import backref, relationship
 
 Base: Any = declarative_base()
 
@@ -12,7 +13,7 @@ if __name__ == "__main__":
     Base.metadata.bind = engine
 
 
-class Status(Base):
+class TwitscanStatus(Base):
     __tablename__ = "status"
     status_id = Column(Integer, primary_key=True)
     text = Column(String)
@@ -24,16 +25,32 @@ class Status(Base):
     is_retweet = Column(Boolean, nullable=False)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
     user_mentions = relationship("Mention", backref=backref("status"), lazy=True)
+    hashtags = relationship("Hashtag", backref=backref("status"), lazy=True)
+    links = relationship("Link", backref=backref("status"), lazy=True)
 
 
 class Mention(Base):
     __tablename__ = "mention"
     mention_id = Column(Integer, primary_key=True)
     status_id = Column(Integer, ForeignKey("status.status_id"), nullable=False)
-    user_id = Column(Integer, nullable=False)  # might not be analysed user
+    user_id = Column(Integer)  # might not be analysed user
 
 
-class User(Base):
+class Hashtag(Base):
+    __tablename__ = "hashtag"
+    hashtag_id = Column(Integer, primary_key=True)
+    status_id = Column(Integer, ForeignKey("status.status_id"), nullable=False)
+    hashtag_name = Column(String)
+
+
+class Link(Base):
+    __tablename__ = "link"
+    link_id = Column(Integer, primary_key=True)
+    status_id = Column(Integer, ForeignKey("status.status_id"), nullable=False)
+    link = Column(String)
+
+
+class TwitscanUser(Base):
     __tablename__ = "user"
     user_id = Column(Integer, primary_key=True)
     screen_name = Column(String, nullable=False)
@@ -44,7 +61,7 @@ class User(Base):
     friends_count = Column(Integer, nullable=False, default=0)
     followers_count = Column(Integer, nullable=False, default=0)
     chirps = relationship(
-        "Status", backref=backref("user"), lazy=True
+        "TwitscanStatus", backref=backref("user"), lazy=True
     )  # either tweets or retweets
     entourage = relationship("Entourage", backref=backref("user"), lazy=True)
     interacted_tweets = relationship("Interaction", backref=backref("user"), lazy=True)

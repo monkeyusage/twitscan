@@ -1,7 +1,12 @@
+import logging
 from argparse import ArgumentParser
-from twitscan.errors import UserProtectedError
-from twitscan.scanner import TwitterUser
+from typing import List
+
 from tqdm import tqdm
+
+from twitscan.errors import UserProtectedError
+from twitscan.models import TwitscanUser
+from twitscan.user import scan, get_followers
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -10,17 +15,24 @@ parser.add_argument(
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
     with open("data/users.txt", "r") as file:
         users = file.read().split("\n")
 
     for user in users:
         try:
-            twitter_user = TwitterUser(screen_name=user, debug_mode=args.debug)
+            twitter_user: TwitscanUser = scan(screen_name=user)
         except UserProtectedError:
+            print(f"Main user {user} is protected")
             continue
-        followers = twitter_user.followers
+        followers: List[int] = get_followers(twitter_user)
         for follower_id in tqdm(followers):
             try:
-                TwitterUser(user_id=follower_id, debug_mode=args.debug)
+                scan(user_id=follower_id)
             except UserProtectedError as err:
                 print(err)
