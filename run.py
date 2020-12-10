@@ -15,6 +15,7 @@ parser.add_argument(
     "-d", "--debug", action="store_true", default=False, help="run in debug mode"
 )
 
+
 def main() -> None:
     args = parser.parse_args()
 
@@ -28,19 +29,29 @@ def main() -> None:
 
     for user in users:
         try:
-            twitter_user: TwitscanUser = scanner.scan(screen_name=user) # scan main user
+            twitter_user: TwitscanUser = scanner.scan(
+                screen_name=user
+            )  # scan main user
         except UserProtectedError:
             logging.info(f"Main user @{user} is protected")
             continue
         except KeyboardInterrupt:
             session.close()
             exit()
-        followers: List[int] = query.followers(twitter_user) # get followers for given user
+        followers: List[int] = query.followers(
+            twitter_user
+        )  # get followers for given user
         # remove followers that have already been scanned
-        all_ids : Set[int] = set(map(lambda user: user.user_id, query.all_users())) # get all user ids
-        followers_scan : List[int] = list(filter(lambda follower_id: follower_id not in all_ids, followers))
+        all_ids: Set[int] = set(
+            map(lambda user: user.user_id, query.all_users())
+        )  # get all user ids
+        followers_scan: List[int] = list(
+            filter(lambda follower_id: follower_id not in all_ids, followers)
+        )
         if len(followers_scan) >= 1600:
-            logging.info(f"Main user @{user} has more than allowed number of followers, skipping")
+            logging.info(
+                f"Main user @{user} has more than allowed number of followers, skipping"
+            )
             continue
         for follower_id in tqdm(followers_scan):
             retries = 0
@@ -57,10 +68,11 @@ def main() -> None:
                     continue
                 except UserProtectedError as err:
                     print(err)
-                    break # get out of retry loop
+                    break  # get out of retry loop
                 except KeyboardInterrupt:
                     session.close()
                     exit()
+
 
 if __name__ == "__main__":
     main()

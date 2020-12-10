@@ -79,7 +79,7 @@ def all_hashtags() -> List[Hashtag]:
     return session.query(Hashtag).all()
 
 
-def by_screen_name(screen_name: str) -> Optional[TwitscanUser]:
+def user_by_screen_name(screen_name: str) -> Optional[TwitscanUser]:
     """queries user by screen name"""
     return (
         session.query(TwitscanUser)
@@ -97,5 +97,26 @@ def hashtags_used(user: TwitscanUser) -> Set[Hashtag]:
     return used_ht
 
 
-def by_status_id(status_id:int) -> Optional[TwitscanStatus]:
-    return session.query(TwitscanStatus).filter(TwitscanStatus.status_id == status_id).first()
+def status_by_status_id(status_id: int) -> Optional[TwitscanStatus]:
+    return (
+        session.query(TwitscanStatus)
+        .filter(TwitscanStatus.status_id == status_id)
+        .first()
+    )
+
+
+def statuses_by_hashtag(hashtag: str) -> List[TwitscanStatus]:
+    hashtags = session.query(Hashtag).filter(Hashtag.hashtag_name == hashtag).all()
+    return list(map(lambda ht: ht.status, hashtags))
+
+
+def find_status(string: str) -> List[TwitscanStatus]:
+    string = "%" + string + "%"
+    return session.query(TwitscanStatus).filter(TwitscanStatus.text.ilike(string)).all()
+
+
+def find_user(name: str) -> List[TwitscanUser]:
+    name = "%" + name + "%"
+    return (
+        session.query(TwitscanUser).filter(TwitscanUser.screen_name.ilike(name)).all()
+    )
