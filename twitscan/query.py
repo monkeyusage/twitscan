@@ -80,8 +80,7 @@ def all_hashtags() -> List[Hashtag]:
 
 
 def by_screen_name(screen_name: str) -> TwitscanUser:
-    """queries user by screen name
-    """
+    """queries user by screen name"""
     return (
         session.query(TwitscanUser)
         .filter(TwitscanUser.screen_name == screen_name)
@@ -90,10 +89,9 @@ def by_screen_name(screen_name: str) -> TwitscanUser:
 
 
 def hashtags_used(user: TwitscanUser) -> Set[Hashtag]:
-    """takes user and returns used hashtags
-    """
+    """takes user and returns used hashtags"""
     used_ht: Set[Hashtag] = set()
     for chirp in user.chirps:
-        hashtags = list(map(lambda hashtag : hashtag.hashtag_name , chirp.hashtags))
+        hashtags = list(map(lambda hashtag: hashtag.hashtag_name, chirp.hashtags))
         used_ht.update(hashtags)
     return used_ht
