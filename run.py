@@ -22,13 +22,13 @@ def handle_user_scan(
 ) -> Optional[TwitscanUser]:
     if all((type(obj) == None for obj in (user_id, name))):
         raise TypeError("User is neither string nor int")
+    user = name if user_id is None else user_id
     retries = 0
     while retries < 2:
         try:
             twitter_user: TwitscanUser = scanner.scan(screen_name=name, user_id=user_id)
             return twitter_user
         except UserProtectedError:
-            user = name if user_id is None else user_id
             logging.debug(f"User {user} is protected")
             return None
         except tweepy.TweepError as err:
