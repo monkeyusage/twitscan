@@ -1,7 +1,8 @@
 import logging
 from argparse import ArgumentParser
-from typing import List, Set
+from typing import List, Set, Optional
 import time
+import os
 
 from tqdm import tqdm
 import tweepy
@@ -16,62 +17,70 @@ parser.add_argument(
 )
 
 
+def handle_user_scan(
+    user_id: Optional[int] = None, name: Optional[str] = None
+) -> Optional[TwitscanUser]:
+    if all((type(obj) == None for obj in (user_id, name))):
+        raise TypeError("User is neither string nor int")
+    user = name if user_id is None else user_id
+    retries = 0
+    while retries < 2:
+        try:
+            twitter_user: TwitscanUser = scanner.scan(screen_name=name, user_id=user_id)
+            return twitter_user
+        except UserProtectedError:
+            logging.debug(f"User {user} is protected")
+            return None
+        except tweepy.TweepError as err:
+            logging.debug(f"Got tweepy error scanning {user}")
+            logging.debug(f"\n\t{err}")
+            logging.debug("Sleeping for 5 seconds then trying to resume")
+            for _ in tqdm(
+                range(5), desc="Got Tweepy Error, retrying after 5 seconds sleep"
+            ):
+                time.sleep(1)
+            retries += 1
+            cmd = "cls" if os.name == "nt" else "clear"
+            os.system(cmd)
+            retries += 1
+        except KeyboardInterrupt:
+            logging.info("KeyboardInterrupt, terminating all")
+            session.close()
+            exit(0)
+    return None
+
+
 def main() -> None:
     args = parser.parse_args()
-
-    if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=level)
 
     with open("data/users.txt", "r") as file:
         users = file.read().split("\n")
 
     for user in users:
-        try:
-            twitter_user: TwitscanUser = scanner.scan(
-                screen_name=user
-            )  # scan main user
-        except UserProtectedError:
-            logging.info(f"Main user @{user} is protected")
+        twitter_user: Optional[TwitscanUser] = handle_user_scan(name=user)
+        if twitter_user is None:
             continue
-        except KeyboardInterrupt:
-            session.close()
-            exit()
-        followers: List[int] = query.followers(
-            twitter_user
-        )  # get followers for given user
-        # remove followers that have already been scanned
-        all_ids: Set[int] = set(
+        followers: List[int] = query.followers(twitter_user)
+        scanned_ids: Set[int] = set(
             map(lambda user: user.user_id, query.all_users())
         )  # get all user ids
-        followers_scan: List[int] = list(
-            filter(lambda follower_id: follower_id not in all_ids, followers)
+        follower_ids: List[int] = list(
+            filter(lambda follower_id: follower_id not in scanned_ids, followers)
         )
-        if len(followers_scan) >= 1600:
-            logging.info(
+        if len(follower_ids) >= 1600:
+            logging.debug(
                 f"Main user @{user} has more than allowed number of followers, skipping"
             )
             continue
-        for follower_id in tqdm(followers_scan):
-            retries = 0
-            while retries < 5:
-                try:
-                    scanner.scan(user_id=follower_id)
-                    break
-                except tweepy.TweepError as err:
-                    logging.info(f"Caught error:\n\t{err}")
-                    logging.info("Sleeping for 1 minute then trying to resume")
-                    for _ in tqdm(range(60)):
-                        time.sleep(1)
-                    retries += 1
-                    continue
-                except UserProtectedError as err:
-                    print(err)
-                    break  # get out of retry loop
-                except KeyboardInterrupt:
-                    session.close()
-                    exit()
+        with tqdm(total=len(follower_ids), position=0, leave=True) as pbar:
+            description = f"Scanning followers of main user {user}"
+            for follower_id in tqdm(
+                follower_ids, position=0, leave=True, desc=description
+            ):
+                handle_user_scan(user_id=follower_id)
+                pbar.update()
 
 
 if __name__ == "__main__":

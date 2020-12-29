@@ -129,12 +129,14 @@ def scan(
         user_id=user_id, screen_name=screen_name
     )
     if maybe_user is None:
-        logging.info(
+        logging.debug(
             f"Scanning user : {screen_name if screen_name else user_id} from twitter"
         )
         db_user: TwitscanUser = scan_twitter(user_id=user_id, screen_name=screen_name)
         return db_user
-    logging.info(f"User {maybe_user.screen_name} already in database, scanning from db")
+    logging.debug(
+        f"User {maybe_user.screen_name} already in database, scanning from db"
+    )
     return maybe_user
 
 
@@ -229,6 +231,8 @@ def save_user(user: User) -> TwitscanUser:
     full_user: Optional[TwitscanUser] = (
         session.query(TwitscanUser).filter(TwitscanUser.user_id == user.id).first()
     )
-    assert full_user is not None, "Could retrieve user from database after saving it"
+    assert (
+        full_user is not None
+    ), "Could not retrieve user from database after saving it"
 
     return full_user
