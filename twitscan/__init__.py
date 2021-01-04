@@ -25,10 +25,10 @@ from twitscan.models import (
     TwitscanUser,
 )
 
-consumer_key = os.environ["TWITTER_CONSUMER_KEY"]
-consumer_secret = os.environ["TWITTER_CONSUMER_SECRET"]
-access_token = os.environ["TWITTER_ACCESS_TOKEN"]
-access_token_secret = os.environ["TWITTER_ACCESS_TOKEN_SECRET"]
+consumer_key = os.environ.get("TWITTER_CONSUMER_KEY", None)
+consumer_secret = os.environ.get("TWITTER_CONSUMER_SECRET", None)
+access_token = os.environ.get("TWITTER_ACCESS_TOKEN", None)
+access_token_secret = os.environ.get("TWITTER_ACCESS_TOKEN_SECRET", None)
 
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
@@ -60,7 +60,7 @@ def db_info():
         "entourage": len(session.query(Entourage).all()),
         "interaction": len(session.query(Interaction).all()),
         "status": len(session.query(TwitscanStatus).all()),
-        "mentions": len(session.query(Mention).all()),
+        "mention": len(session.query(Mention).all()),
         "urls": len(session.query(Link).all()),
         "hashtags": len(session.query(Hashtag).all()),
     }

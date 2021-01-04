@@ -35,7 +35,7 @@ def save_status(raw_status: Status) -> TwitscanStatus:
     Add mentions in database if they exist
     Return it anyway
     """
-    existing_status = check_status(raw_status)
+    existing_status: Optional[TwitscanStatus] = check_status(raw_status)
     if existing_status is not None:
         return existing_status
 
