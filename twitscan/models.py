@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, String, BLOB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import backref, relationship
 
@@ -23,6 +23,7 @@ class TwitscanStatus(Base):
     in_reply_to_status_id = Column(Integer)
     in_reply_to_user_id = Column(Integer)
     is_retweet = Column(Boolean, nullable=False)
+    status_picture = Column(BLOB, nullable=True)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
     user_mentions = relationship("Mention", backref=backref("status"), lazy=True)
     hashtags = relationship("Hashtag", backref=backref("status"), lazy=True)
@@ -60,6 +61,7 @@ class TwitscanUser(Base):
     status_count = Column(Integer, nullable=False, default=0)
     friends_count = Column(Integer, nullable=False, default=0)
     followers_count = Column(Integer, nullable=False, default=0)
+    user_picture = Column(BLOB, nullable=True)
     chirps = relationship(
         "TwitscanStatus", backref=backref("user"), lazy=True
     )  # either tweets or retweets
