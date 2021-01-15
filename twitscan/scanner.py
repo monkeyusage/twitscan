@@ -221,7 +221,7 @@ def save_user(user: User) -> TwitscanUser:
         status_count=user.statuses_count,
         friends_count=user.friends_count,
         followers_count=user.followers_count,
-        user_picture_url=user.profile_image_url
+        user_picture_url=user.profile_image_url,
     )
     session.add(twitscan_user)
     save_entourage(user)

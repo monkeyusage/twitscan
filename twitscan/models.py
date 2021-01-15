@@ -28,6 +28,8 @@ class TwitscanStatus(Base):
     hashtags = relationship("Hashtag", backref=backref("status"), lazy=True)
     links = relationship("Link", backref=backref("status"), lazy=True)
 
+    def __repr__(self) -> str:
+        return f"TwitscanStatus: {self.user_id} on {self.created_at} twitted id={self.status_id}:\n\t{self.text})"
 
 class Mention(Base):
     __tablename__ = "mention"
@@ -67,6 +69,8 @@ class TwitscanUser(Base):
     entourage = relationship("Entourage", backref=backref("user"), lazy=True)
     interacted_tweets = relationship("Interaction", backref=backref("user"), lazy=True)
 
+    def __repr__(self) -> str:
+        return f"TwitscanUser({self.screen_name}, {self.user_id})"
 
 class Interaction(Base):
     __tablename__ = "interaction"
