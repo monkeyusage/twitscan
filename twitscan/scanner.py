@@ -25,9 +25,7 @@ def check_status(raw_status: Status) -> Optional[TwitscanStatus]:
         .filter(TwitscanStatus.status_id == raw_status.id)
         .one_or_none()
     )
-    if existing_status is not None:
-        return existing_status
-    return None
+    return existing_status
 
 
 def save_status(raw_status: Status) -> TwitscanStatus:
@@ -96,9 +94,7 @@ def check_user(
             .filter(TwitscanUser.user_id == user_id)
             .one_or_none()
         )
-    if user is not None:
-        return user
-    return None
+    return user
 
 
 def scan_twitter(user_id: Optional[int], screen_name: Optional[str]) -> TwitscanUser:
@@ -215,6 +211,7 @@ def save_user(user: User) -> TwitscanUser:
     twitscan_user: TwitscanUser = TwitscanUser(
         user_id=user.id,
         screen_name=user.screen_name,
+        name = user.name,
         created_at=user.created_at,
         verified=user.verified,
         favorites_count=user.favourites_count,

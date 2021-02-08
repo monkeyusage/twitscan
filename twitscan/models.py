@@ -31,6 +31,7 @@ class TwitscanStatus(Base):
     def __repr__(self) -> str:
         return f"TwitscanStatus: {self.user_id} on {self.created_at} twitted id={self.status_id}:\n\t{self.text})"
 
+
 class Mention(Base):
     __tablename__ = "mention"
     mention_id = Column(Integer, primary_key=True)
@@ -56,6 +57,7 @@ class TwitscanUser(Base):
     __tablename__ = "user"
     user_id = Column(Integer, primary_key=True)
     screen_name = Column(String, nullable=False)
+    name = Column(String, nullable=True)
     created_at = Column(Date, nullable=False)
     verified = Column(Boolean, nullable=False)
     favorites_count = Column(Integer, nullable=False)
@@ -71,6 +73,7 @@ class TwitscanUser(Base):
 
     def __repr__(self) -> str:
         return f"TwitscanUser({self.screen_name}, {self.user_id})"
+
 
 class Interaction(Base):
     __tablename__ = "interaction"
