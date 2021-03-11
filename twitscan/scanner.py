@@ -211,7 +211,7 @@ def save_user(user: User) -> TwitscanUser:
     twitscan_user: TwitscanUser = TwitscanUser(
         user_id=user.id,
         screen_name=user.screen_name,
-        name = user.name,
+        name=user.name,
         created_at=user.created_at,
         verified=user.verified,
         favorites_count=user.favourites_count,

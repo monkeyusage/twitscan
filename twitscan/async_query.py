@@ -1,5 +1,6 @@
 from __future__ import annotations
-from twitscan import session
+from twitscan import async_session
+from sqlalchemy import select
 from twitscan.models import (
     Entourage,
     Hashtag,
@@ -59,46 +60,56 @@ def common_entourage(user_a: TwitscanUser, user_b: TwitscanUser) -> set[Twitscan
     return entourage_a & entourage_b
 
 
-def all_users() -> list[TwitscanUser]:
-    return session.query(TwitscanUser).all()
+async def all_users() -> list[TwitscanUser]:
+    with async_session() as session:
+        result = await session.execute(select(TwitscanUser))
+    
 
 
-def all_statuses() -> list[TwitscanStatus]:
-    return session.query(TwitscanStatus).all()
+async def all_statuses() -> list[TwitscanStatus]:
+    with async_session() as session:
+        result = await session.execute(select(TwitscanStatus))
+    return result
 
 
-def all_interations() -> list[Interaction]:
-    return session.query(Interaction).all()
+async def all_interations() -> list[Interaction]:
+    with async_session() as session:
+        result = await session.execute(select(Interaction)).all()
+    return result
 
+async def all_entourages() -> list[Entourage]:
+    with async_session() as session:
+        result = await session.execute(select(Entourage)).all()
+    return result
 
-def all_entourages() -> list[Entourage]:
-    return session.query(Entourage).all()
+async def all_mentions() -> list[Mention]:
+    with async_session() as session:
+        result = await session.execute(select(Mention)).all()
+    return result
 
+async def all_links() -> list[Link]:
+    with async_session() as session:
+        result = await session.execute(select(Link))
+    return result.all()
 
-def all_mentions() -> list[Mention]:
-    return session.query(Mention).all()
+async def all_hashtags() -> list[Hashtag]:
+    with async_session() as session:
+        result = await session.execute(select(Hashtag))
+    return result.all()
 
-
-def all_links() -> list[Link]:
-    return session.query(Link).all()
-
-
-def all_hashtags() -> list[Hashtag]:
-    return session.query(Hashtag).all()
-
-
-def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
+async def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
     """queries user by screen name"""
-    return (
-        session.query(TwitscanUser)
-        .filter(TwitscanUser.screen_name == screen_name)
-        .first()
-    )
+    with async_session() as session:
+        stmt = select(TwitscanUser).where(TwitscanUser.screen_name == screen_name)
+        result = await session.execute(stmt)
+    return result.first()
 
 
-def user_by_id(user_id: int) -> TwitscanUser | None:
-    return session.query(TwitscanUser).filter(TwitscanUser.user_id == user_id).first()
-
+async def user_by_id(user_id: int) -> TwitscanUser | None:
+    with async_session() as session:
+        stmt = select(TwitscanUser).where(TwitscanUser.user_id == user_id)
+        result = await session.execute(stmt)
+    return result.first()
 
 def hashtags_used(user: TwitscanUser) -> set[Hashtag]:
     """takes user and returns used hashtags"""

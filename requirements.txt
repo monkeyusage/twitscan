@@ -2,4 +2,4 @@ tweepy
 mypy
 tqdm
 black
-sqlalchemy
+SQLAlchemy==1.4.0b3
