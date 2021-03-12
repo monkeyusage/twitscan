@@ -196,7 +196,7 @@ def save_interactions(user: User) -> None:
         interaction = Interaction(
             user_id=user.id,
             status_id=status,
-            like=is_like,
+            fav=is_like,
             retweet=is_retweet,
             comment=is_comment,
         )

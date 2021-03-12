@@ -80,7 +80,7 @@ class Interaction(Base):
     interaction_id = Column("interaction_id", Integer, primary_key=True)
     user_id = Column("user_id", Integer, ForeignKey("user.user_id"))
     status_id = Column("status_id", Integer, ForeignKey("status.status_id"))
-    like = Column("like", Boolean, nullable=False)
+    fav = Column("fav", Boolean, nullable=False)
     retweet = Column("retweet", Boolean, nullable=False)
     comment = Column("comment", Boolean, nullable=False)
 
