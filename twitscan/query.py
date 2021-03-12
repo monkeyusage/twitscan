@@ -1,5 +1,7 @@
 from __future__ import annotations
 from twitscan import session
+from sqlalchemy import select
+from typing import NamedTuple, Iterator
 from twitscan.models import (
     Entourage,
     Hashtag,
@@ -59,75 +61,92 @@ def common_entourage(user_a: TwitscanUser, user_b: TwitscanUser) -> set[Twitscan
     return entourage_a & entourage_b
 
 
-def all_users() -> list[TwitscanUser]:
-    return session.query(TwitscanUser).all()
+def all_users() -> Iterator[NamedTuple[TwitscanUser]]:
+    return session.execute(select(TwitscanUser))
 
 
-def all_statuses() -> list[TwitscanStatus]:
-    return session.query(TwitscanStatus).all()
+def all_statuses() -> Iterator[NamedTuple[TwitscanStatus]]:
+    return session.execute(select(TwitscanStatus))
 
 
-def all_interations() -> list[Interaction]:
-    return session.query(Interaction).all()
+def all_interations() -> Iterator[NamedTuple[Interaction]]:
+    return session.execute(select(Interaction).all())
 
 
-def all_entourages() -> list[Entourage]:
-    return session.query(Entourage).all()
+def all_entourages() -> Iterator[NamedTuple[Entourage]]:
+    return session.execute(select(Entourage).all())
 
 
-def all_mentions() -> list[Mention]:
-    return session.query(Mention).all()
+def all_mentions() -> Iterator[NamedTuple[Mention]]:
+    return session.execute(select(Mention).all())
 
 
-def all_links() -> list[Link]:
-    return session.query(Link).all()
+def all_links() -> Iterator[NamedTuple[Link]]:
+    return session.execute(select(Link).all())
 
 
-def all_hashtags() -> list[Hashtag]:
-    return session.query(Hashtag).all()
+def all_hashtags() -> Iterator[Hashtag]:
+    hts = session.execute(select(Hashtag))
+    for ht in hts:
+        yield ht.Hashtag
 
 
 def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
     """queries user by screen name"""
-    return (
-        session.query(TwitscanUser)
-        .filter(TwitscanUser.screen_name == screen_name)
-        .first()
-    )
+    result = session.execute(
+        select(TwitscanUser)
+        .where(TwitscanUser.screen_name == screen_name)
+    ).first()
+    if result:
+        return result.TwitscanUser
+    return
 
 
 def user_by_id(user_id: int) -> TwitscanUser | None:
-    return session.query(TwitscanUser).filter(TwitscanUser.user_id == user_id).first()
+    result = session.execute(
+        select(TwitscanUser)
+        .where(TwitscanUser.user_id == user_id)
+    ).first()
+    if result:
+        return result.TwitscanUser
+    return
 
 
-def hashtags_used(user: TwitscanUser) -> set[Hashtag]:
+def hashtags_used(user: TwitscanUser) -> Iterator[Hashtag]:
     """takes user and returns used hashtags"""
-    used_ht: set[Hashtag] = set()
-    for chirp in user.chirps:
-        hashtags = [hashtag.hashtag_name for hashtag in chirp.hashtags]
-        used_ht.update(hashtags)
-    return used_ht
+    results = session.execute(
+        select(Hashtag) 
+        .join(TwitscanStatus)
+        .where(TwitscanStatus.user_id == user.user_id)
+    )
+    for result in results:
+        yield result.Hashtag
 
 
-def common_hashtags(user_a: TwitscanUser, user_b: TwitscanUser) -> set[Hashtag]:
-    ht_a: set[Hashtag] = hashtags_used(user_a)
-    ht_b: set[Hashtag] = hashtags_used(user_b)
-    return ht_a & ht_b
+def common_hashtags(user_a: TwitscanUser, user_b: TwitscanUser) -> list[Hashtag]:
+    ht_a: set[Hashtag] = set(ht for ht in hashtags_used(user_a))
+    ht_common : list[Hashtag] = [ht for ht in hashtags_used(user_b) if ht in ht_a]
+    return ht_common
 
 
 def status_by_id(status_id: int) -> TwitscanStatus | None:
-    return (
-        session.query(TwitscanStatus)
-        .filter(TwitscanStatus.status_id == status_id)
-        .first()
+    result = session.excute(
+        select(TwitscanStatus)
+        .where(TwitscanStatus.status_id == status_id)
+    ).first()
+    if result:
+        return result.TwitscanStatus
+    return
+
+
+def statuses_by_hashtag(hashtag: str) -> Iterator[TwitscanStatus]:
+    results = session.execute(
+        select(Hashtag)
+        .join(TwitscanStatus)
+        .where(Hashtag.hashtag_name == hashtag)
     )
-
-
-def statuses_by_hashtag(hashtag: str) -> list[TwitscanStatus]:
-    hashtags = session.query(Hashtag).filter(Hashtag.hashtag_name == hashtag).all()
-    statuses = [ht.status for ht in hashtags]
-    return statuses
-
+    for result in results:
+        yield result.Hashtag.status
 
 def find_status(string: str) -> list[TwitscanStatus]:
     string = "%" + string + "%"
@@ -188,7 +207,7 @@ def interaction(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
     return sum([sum(l) for l in (comments, retweets, likes)])
 
 
-def engagement(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
+def engagement(target_user: TwitscanUser) -> dict[TwitscanUser, int]:
     """computes the engagement of user_a towards user_b :=> the higher the more engagement"""
     interaction_score: int = interaction(user_a, user_b)
     similarity_score: int = similarity(user_a, user_b)

@@ -1,6 +1,4 @@
-echo "Installing requirements for project"
-pip install -r requirements.txt
-echo "Creating data folder for database and other files"
+@echo off
+python -m pip install -r requirements.txt
 mkdir data
-echo "Creating database"
 python twitscan\models.py
