@@ -3,7 +3,6 @@ from collections import namedtuple
 
 from twitscan import session
 from sqlalchemy import select
-from sqlalchemy.engine.result import Result
 from typing import Callable, Iterator
 from twitscan.models import (
     Entourage,
@@ -75,7 +74,7 @@ common_hashtags : CommonMaker = common_items_maker(hashtags)
 
 def table_generator_maker(table) -> Callable[[], Iterator]:
     def table_generator() -> Iterator:
-        items : Result = session.execute(select(table))
+        items  = session.execute(select(table))
         for item in items:
             yield item._data[0]
     return table_generator
@@ -90,7 +89,7 @@ all_hashtags : Iterator[Hashtag] = table_generator_maker(Hashtag)
 
 
 def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
-    result : Result = session.execute(
+    result  = session.execute(
         select(TwitscanUser).where(TwitscanUser.screen_name == screen_name)
     ).first()
     if result:
@@ -99,7 +98,7 @@ def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
 
 
 def user_by_id(user_id: int) -> TwitscanUser | None:
-    result : Result = session.execute(
+    result  = session.execute(
         select(TwitscanUser).where(TwitscanUser.user_id == user_id)
     ).first()
     if result:
@@ -108,7 +107,7 @@ def user_by_id(user_id: int) -> TwitscanUser | None:
 
 
 def status_by_id(status_id: int) -> TwitscanStatus | None:
-    result : Result = session.execute(
+    result  = session.execute(
         select(TwitscanStatus).where(TwitscanStatus.status_id == status_id)
     ).first()
     if result:
@@ -178,7 +177,7 @@ def interactions_for(target_user: TwitscanUser) -> Iterator[InteractionScore]:
         )
         GROUP BY user_id
     '''
-    interactions_result : Result = session.execute(stmt)
+    interactions_result  = session.execute(stmt)
     interactions : InteractionScore = dict((
         result.user_id, (result.n_likes, result.n_comments, result.n_retweets)
     ) for result in interactions_result)
