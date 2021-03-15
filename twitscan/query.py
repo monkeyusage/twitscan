@@ -137,22 +137,26 @@ def find_user(name: str) -> list[TwitscanUser]:
     users = session.execute(stmt)
     return [u.TwitscanUser for u in users.fetchall()]
     
+SimilarityValues = namedtuple('SimilarityValues', ['c_ht', 'c_fol', 'c_fri'])
 SimilarityScore : dict[TwitscanUser, tuple[int, int, int]]
 
 def similarity_for(target_user: TwitscanUser) -> Iterator[SimilarityScore]:
     '''computes similarity score for all users towards target_user'''
-    for user in all_users():
-        c_ht : list[TwitscanUser] = common_hashtags(user, target_user)
-        c_fol : list[TwitscanUser] = common_followers(user, target_user)
-        c_fri : list[TwitscanUser] = common_friends(user, target_user)
-        similarity : int = len(c_fri) + len(c_fol) + len(c_ht)
+    stmt = f''' '''
+    similarities_result = session.execute(stmt)
+    similarities : SimilarityScore = dict((
+        result.user_id, (result.common_ht, result.common_followers, result.common_friends)
+    ) for result in similarities_result)
+    for user in followers(target_user):
+        score = similarities.get(user.user_id, (0, 0, 0))
+        similarity : SimilarityValues = SimilarityValues(score[0])
         yield {user:similarity} # assuming all have same weight
 
 InteractionValues = namedtuple('InteractionValues', ['n_likes', 'n_comments', 'n_retweets'])
 InteractionScore : dict[TwitscanUser, InteractionValues]
 
 def interactions_for(target_user: TwitscanUser) -> Iterator[InteractionScore]:
-    '''computes all the interactions from followers followers to target_user
+    '''computes all the interactions from followers to target_user
         :=> the higher the more interaction
     generator to get all interactions
     '''
@@ -197,13 +201,14 @@ def engagement_for(target_user: TwitscanUser) -> EngagementScore:
 
 
 def db_info() -> dict[str, int]:
+    count = lambda table: session.execute(f'SELECT COUNT(*) FROM {table}').first()[0]
     info = {
-        "user": len(list(all_users())),
-        "entourage": len(list(all_entourages())),
-        "interaction": len(list(all_interactions())),
-        "status": len(list(all_statuses())),
-        "mention": len(list(all_mentions())),
-        "urls": len(list(all_links())),
-        "hashtags": len(list(all_hashtags())),
+        'user': count('user'),
+        'entourage': count('friend'),
+        'interaction': count('interaction'),
+        'status': count('status'),
+        'mention': count('mention'),
+        'urls': count('link'),
+        'hashtags': count('hashtag'),
     }
     return info
