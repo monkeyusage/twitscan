@@ -1,14 +1,20 @@
 import os
+import asyncio
+from typing import Coroutine
 from twitscan import query
 from collections.abc import Iterator
 from string import hexdigits
 from random import choice
 
-TEST_USERNAME = os.environ["TWITSCAN_TEST_USER"]
-TEST_USER = query.user_by_screen_name(TEST_USERNAME)
-if TEST_USER is None:
-    raise Exception("Could not retrieve test user from database")
 
+async def fetch_user():
+    user_name = os.environ["TWITSCAN_TEST_USER"]
+    user = await query.user_by_screen_name(user_name)
+    if user is None:
+        raise Exception("Could not retrieve test user from database")
+    return user_name, user
+
+TEST_USERNAME, TEST_USER = asyncio.get_event_loop().run_until_complete(fetch_user())
 
 def test_user_by_screen_name():
     nonce = "".join([choice(hexdigits) for _ in range(999999)])

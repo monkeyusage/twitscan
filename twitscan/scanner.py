@@ -3,7 +3,7 @@ from typing import List, Optional, Set
 
 from tweepy.models import Status, User
 
-from twitscan import api, config, session
+from twitscan import api, config, sync_session
 from twitscan.errors import UserProtectedError
 from twitscan.models import (
     Entourage,
@@ -21,7 +21,7 @@ def check_status(raw_status: Status) -> Optional[TwitscanStatus]:
     Return status if yes else return None
     """
     existing_status: Optional[TwitscanStatus] = (
-        session.query(TwitscanStatus)
+        sync_session.query(TwitscanStatus)
         .filter(TwitscanStatus.status_id == raw_status.id)
         .one_or_none()
     )
@@ -68,12 +68,12 @@ def save_status(raw_status: Status) -> TwitscanStatus:
         for hashtag in raw_status.entities["hashtags"]
     ]
 
-    session.add(status)
-    session.add_all(mentions)
-    session.add_all(urls)
-    session.add_all(tags)
+    sync_session.add(status)
+    sync_session.add_all(mentions)
+    sync_session.add_all(urls)
+    sync_session.add_all(tags)
 
-    session.commit()
+    sync_session.commit()
 
     return status
 
@@ -84,13 +84,13 @@ def check_user(
     """Checks if user is in database, if so returns it otherwise returns None"""
     if screen_name:
         user: Optional[TwitscanUser] = (
-            session.query(TwitscanUser)
+            sync_session.query(TwitscanUser)
             .filter(TwitscanUser.screen_name == screen_name)
             .one_or_none()
         )
     else:
         user = (
-            session.query(TwitscanUser)
+            sync_session.query(TwitscanUser)
             .filter(TwitscanUser.user_id == user_id)
             .one_or_none()
         )
@@ -158,7 +158,7 @@ def save_entourage(user: User) -> None:
         )
         persons.append(person)
 
-    session.add_all(persons)
+    sync_session.add_all(persons)
 
 
 def save_interactions(user: User) -> None:
@@ -202,7 +202,7 @@ def save_interactions(user: User) -> None:
         )
         interactions.append(interaction)
 
-    session.add_all(interactions)
+    sync_session.add_all(interactions)
 
 
 def save_user(user: User) -> TwitscanUser:
@@ -220,14 +220,14 @@ def save_user(user: User) -> TwitscanUser:
         followers_count=user.followers_count,
         user_picture_url=user.profile_image_url,
     )
-    session.add(twitscan_user)
+    sync_session.add(twitscan_user)
     save_entourage(user)
     save_interactions(user)
 
-    session.commit()
+    sync_session.commit()
 
     full_user: Optional[TwitscanUser] = (
-        session.query(TwitscanUser).filter(TwitscanUser.user_id == user.id).first()
+        sync_session.query(TwitscanUser).filter(TwitscanUser.user_id == user.id).first()
     )
     assert (
         full_user is not None

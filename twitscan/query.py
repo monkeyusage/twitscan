@@ -1,160 +1,160 @@
 from __future__ import annotations
+import asyncio
 from collections import namedtuple
 
-from twitscan import session
-from sqlalchemy import select
-from typing import Callable, Iterator
-from twitscan.models import (
-    Entourage,
-    Hashtag,
-    Interaction,
-    Link,
-    Mention,
-    TwitscanStatus,
-    TwitscanUser,
-)
+from twitscan import async_session as session
+from typing import Awaitable, Iterator, Coroutine, AsyncGenerator
+from twitscan.models import TwitscanUser
 
 
-def followers(user: TwitscanUser) -> Iterator[TwitscanUser]:
-    stmt = (
-        select(TwitscanUser)
-        .join(Entourage, TwitscanUser.user_id == Entourage.friend_follower_id)
-        .where(Entourage.user_id == user.user_id and Entourage.follower)
-    )
-    results = session.execute(stmt)
-    for follower in results:
-        yield follower.TwitscanUser
+async def followers(user_id: int) -> AsyncGenerator[int, None]:
+    stmt = f'''
+        SELECT user_id FROM user
+        JOIN friend ON user.user_id = friend.friend_follower_id
+        WHERE (friend.user_id == {user_id}) AND (friend.follower IS TRUE)
+    '''
+    async with session.execute(stmt) as cursor:
+        async for follower in cursor:
+            yield follower
 
 
-def friends(user: TwitscanUser) -> Iterator[TwitscanUser]:
-    stmt = (
-        select(TwitscanUser)
-        .join(Entourage, TwitscanUser.user_id == Entourage.friend_follower_id)
-        .where(Entourage.user_id == user.user_id and Entourage.friend)
-    )
-    results = session.execute(stmt)
-    for follower in results:
-        yield follower.TwitscanUser
+async def friends(user_id: int) -> AsyncGenerator[int, None]:
+    stmt = f'''
+        SELECT user_id FROM user
+        JOIN friend ON user.user_id = friend.friend_follower_id
+        WHERE (friend.user_id == {user_id}) AND (friend.friend IS TRUE)
+    '''
+    async with session.execute(stmt) as cursor:
+        async for friend in cursor:
+            yield friend
 
 
-def entourage(user: TwitscanUser) -> Iterator[TwitscanUser]:
-    stmt = (
-        select(TwitscanUser)
-        .join(Entourage, TwitscanUser.user_id == Entourage.friend_follower_id)
-        .where(Entourage.user_id == user.user_id)
-    )
-    results = session.execute(stmt)
-    for ent in results:
-        yield ent.TwitscanUser
+async def entourage(user_id: int) -> AsyncGenerator[int, None]:
+    stmt = f'''
+        SELECT user_id FROM user
+        JOIN friend ON user.user_id = friend.friend_follower_id
+        WHERE friend.user_id == {user_id}
+    '''
+    async with session.execute(stmt) as cursor:
+        async for ent in cursor:
+            yield ent
 
-def hashtags(user: TwitscanUser) -> Iterator[Hashtag]:
-    """takes user and returns used hashtags"""
-    results = session.execute(
-        select(Hashtag)
-        .join(TwitscanStatus)
-        .where(TwitscanStatus.user_id == user.user_id)
-    )
-    for result in results:
-        yield result.Hashtag
+async def hashtags(user_id: int) -> AsyncGenerator[str, None]:
+    '''takes user and returns used hashtags'''
+    stmt = f'''
+        SELECT hashtag_name FROM hashtag
+        JOIN status ON status.status_by_id = hashtag.status_id
+        WHERE status.user_id == {user_id}
+    '''
+    async with session.execute(stmt) as cursor:
+        async for result in cursor:
+            yield result
 
 
-CommonMaker : Callable[[TwitscanUser, TwitscanUser], list[TwitscanUser]]
-
-def common_items_maker(generator : Iterator[TwitscanUser]) -> CommonMaker:
-    def common_func(user_a:TwitscanUser, user_b:TwitscanUser) -> list[TwitscanUser]:
-        a_set : set[TwitscanUser] = set(item for item in generator(user_a))
-        common_list : list[TwitscanUser] = [item for item in generator(user_b) if item in a_set]
+def common_items_maker(generator: AsyncGenerator):
+    async def common_func(user_a:TwitscanUser, user_b:TwitscanUser):
+        a_set : set[int] = set()
+        common_list : list[int] = []
+        async for item in generator(user_a):
+            a_set.add(item)
+        async for item in generator(user_b):
+            if item in a_set:
+                common_list.append(item)
         return common_list
     return common_func
 
-common_entourage : CommonMaker = common_items_maker(entourage)
-common_followers : CommonMaker = common_items_maker(followers)
-common_friends : CommonMaker = common_items_maker(friends)
-common_hashtags : CommonMaker = common_items_maker(hashtags)
+common_entourage = common_items_maker(entourage)
+common_followers = common_items_maker(followers)
+common_friends = common_items_maker(friends)
+common_hashtags = common_items_maker(hashtags)
 
-def table_generator_maker(table) -> Callable[[], Iterator]:
-    def table_generator() -> Iterator:
-        items  = session.execute(select(table))
-        for item in items:
-            yield item._data[0]
+def table_generator_maker(table):
+    async def table_generator():
+        stmt = f'SELECT * FROM {table}'
+        async with session.execute(stmt) as cursor:
+            async for item in cursor:
+                yield item
     return table_generator
 
-all_users : Iterator[TwitscanUser] = table_generator_maker(TwitscanUser)
-all_statuses : Iterator[TwitscanStatus] = table_generator_maker(TwitscanStatus)
-all_interactions : Iterator[Interaction] = table_generator_maker(Interaction)
-all_entourages : Iterator[Entourage] = table_generator_maker(Entourage)
-all_mentions : Iterator[Mention] = table_generator_maker(Mention)
-all_links : Iterator[Link] = table_generator_maker(Link)
-all_hashtags : Iterator[Hashtag] = table_generator_maker(Hashtag)
+all_users = table_generator_maker('user')
+all_statuses = table_generator_maker('status')
+all_interactions = table_generator_maker('interaction')
+all_entourages = table_generator_maker('friend')
+all_mentions = table_generator_maker('mention')
+all_links = table_generator_maker('link')
+all_hashtags = table_generator_maker('hashtag')
 
 
-def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
-    result  = session.execute(
-        select(TwitscanUser).where(TwitscanUser.screen_name == screen_name)
-    ).first()
-    if result:
-        return result.TwitscanUser
-    return
+async def user_by_screen_name(screen_name: str) -> Awaitable[tuple | None]:
+    result = await session.execute(f'''
+        SELECT * FROM user
+        WHERE user.screen_name = '{screen_name}'
+    ''')
+    user = await result.fetchone()
+    return user
 
 
-def user_by_id(user_id: int) -> TwitscanUser | None:
-    result  = session.execute(
-        select(TwitscanUser).where(TwitscanUser.user_id == user_id)
-    ).first()
-    if result:
-        return result.TwitscanUser
-    return
+async def user_by_id(user_id: int) -> Awaitable[tuple | None]:
+    result = await session.execute(f'''
+        SELECT * FROM user
+        WHERE user.user_id = '{user_id}'
+    ''')
+    user = await result.fetchone()
+    return user
 
 
-def status_by_id(status_id: int) -> TwitscanStatus | None:
-    result  = session.execute(
-        select(TwitscanStatus).where(TwitscanStatus.status_id == status_id)
-    ).first()
-    if result:
-        return result.TwitscanStatus
-    return
+async def status_by_id(status_id: int) -> Awaitable[tuple | None]:
+    result = await session.execute(f'''
+        SELECT * FROM status
+        WHERE status.status_id == '{status_id}'
+    ''')
+    status = await result.fetchone()
+    return status
 
 
-def statuses_by_hashtag(hashtag: str) -> Iterator[TwitscanStatus]:
-    results = session.execute(
-        select(Hashtag).join(TwitscanStatus).where(Hashtag.hashtag_name == hashtag)
-    )
-    for result in results:
-        yield result.Hashtag.status
+async def statuses_by_hashtag(hashtag: str) -> Awaitable[tuple | None]:
+    stmt = f'''
+        SELECT * FROM hashtag
+        JOIN status on hashtag.status_id = status.status_id 
+        WHERE hashtag.hashtag_name = '{hashtag}'
+    '''
+    async with session.execute(stmt) as cursor:
+        async for status in cursor:
+            yield status
 
 
-def find_status(string: str) -> list[TwitscanStatus]:
-    string = "%" + string + "%"
-    stmt = select(TwitscanStatus).where(TwitscanStatus.text.ilike(string))
-    statuses = session.execute(stmt)
-    return [s.TwitscanStatus for s in statuses.fetchall()]
+async def statuses(string: str) -> AsyncGenerator[tuple, None]:
+    stmt = f'''
+        SELECT * FROM status
+        WHERE status.text LIKE '%{string}%'
+    '''
+    async with session.execute(stmt) as cursor:
+        async for status in cursor:
+            yield status
 
 
-def find_user(name: str) -> list[TwitscanUser]:
-    name = "%" + name + "%"
-    stmt = select(TwitscanUser).where(TwitscanUser.screen_name.ilike(name))
-    users = session.execute(stmt)
-    return [u.TwitscanUser for u in users.fetchall()]
-    
-SimilarityValues = namedtuple('SimilarityValues', ['c_ht', 'c_fol', 'c_fri'])
-SimilarityScore : dict[TwitscanUser, tuple[int, int, int]]
+async def users(name: str) -> AsyncGenerator[tuple, None]:
+    stmt = f'''
+        SELECT * FROM user
+        WHERE user.screen_name LIKE '%{name}%'
+    '''
+    async with session.execute(stmt) as cursor:
+        async for item in cursor:
+            yield item
 
-def similarity_for(target_user: TwitscanUser) -> Iterator[SimilarityScore]:
+def similarity_for(target_user: TwitscanUser):
     '''computes similarity score for all users towards target_user'''
     stmt = f''' '''
     similarities_result = session.execute(stmt)
-    similarities : SimilarityScore = dict((
+    similarities = dict((
         result.user_id, (result.common_ht, result.common_followers, result.common_friends)
     ) for result in similarities_result)
     for user in followers(target_user):
         score = similarities.get(user.user_id, (0, 0, 0))
-        similarity : SimilarityValues = SimilarityValues(score[0])
-        yield {user:similarity} # assuming all have same weight
+        yield {user:score}
 
-InteractionValues = namedtuple('InteractionValues', ['n_likes', 'n_comments', 'n_retweets'])
-InteractionScore : dict[TwitscanUser, InteractionValues]
 
-def interactions_for(target_user: TwitscanUser) -> Iterator[InteractionScore]:
+async def interactions_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
     '''computes all the interactions from followers to target_user
         :=> the higher the more interaction
     generator to get all interactions
@@ -173,34 +173,28 @@ def interactions_for(target_user: TwitscanUser) -> Iterator[InteractionScore]:
             FROM user
             LEFT JOIN interaction ON user.user_id = interaction.user_id
             LEFT JOIN status ON interaction.status_id = status.status_id
-            WHERE status.user_id = {target_user.user_id}
+            WHERE status.user_id = '{target_user_id}'
         )
         GROUP BY user_id
     '''
-    interactions_result  = session.execute(stmt)
-    interactions : InteractionScore = dict((
-        result.user_id, (result.n_likes, result.n_comments, result.n_retweets)
-    ) for result in interactions_result)
-    for user in followers(target_user):
-        score = interactions.get(user.user_id, (0, 0, 0))
-        values = InteractionValues(n_likes=score[0], n_comments=score[1], n_retweets=score[2])
-        yield {user: values}
+    async with session.execute(stmt) as cursor:
+        async for item in cursor:
+            yield item
 
-EngagementScore : dict[TwitscanUser, int]
-
-def engagement_for(target_user: TwitscanUser) -> EngagementScore:
-    """computes the engagement of user_a towards user_b :=> the higher the more engagement"""
-    engagements : EngagementScore = {}
-    for interaction, similarity in zip(interactions_for(target_user), ):
-        ...
-    interaction_score: InteractionScore = interactions_for(target_user)
-    
-    similarity_score: SimilarityScore = similarity_for(target_user)
-    return interaction_score * 2 + similarity_score
+def engagement_for(target_user: TwitscanUser):
+    '''computes the engagement of user_a towards user_b :=> the higher the more engagement'''
+    engagements = {}
+    interaction_score = interactions_for(target_user)
+    similarity_score = similarity_for(target_user)
+    return engagements
 
 
 def db_info() -> dict[str, int]:
-    count = lambda table: session.execute(f'SELECT COUNT(*) FROM {table}').first()[0]
+    async def async_count(table: str) -> Awaitable[int]:
+        stmt = f'SELECT COUNT(*) FROM {table}'
+        result = await session.execute(stmt)
+        return result.fetchone()[0]
+    count = lambda table: asyncio.get_event_loop().run_until_complete(async_count(table))
     info = {
         'user': count('user'),
         'entourage': count('friend'),

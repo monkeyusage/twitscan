@@ -7,9 +7,11 @@ __version__ = "0.0.1"
 __author__ = "monkeyusage"
 __license__ = "MIT"
 import os
+import asyncio
 from typing import Any
 
 import tweepy
+import aiosqlite
 from sqlalchemy import create_engine
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.orm import sessionmaker
@@ -33,9 +35,14 @@ def config_db(test: bool = False) -> tuple[Engine, Any]:
     session = Session()
     return engine, session
 
+async def get_async_session():
+    session = await aiosqlite.connect('data/twitter.db')
+    return session
 
-engine, session = config_db()
+
+engine, sync_session = config_db()
 test_engine, test_session = config_db(test=True)
+async_session = asyncio.get_event_loop().run_until_complete(get_async_session())
 
 config: dict[str, int] = {
     "MAX_FOLLOWERS": 200,
