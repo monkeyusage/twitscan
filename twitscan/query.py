@@ -1,9 +1,8 @@
 from __future__ import annotations
 import asyncio
-from collections import namedtuple
 
 from twitscan import async_session as session
-from typing import Awaitable, Iterator, Coroutine, AsyncGenerator
+from typing import Awaitable, AsyncGenerator, Callable
 from twitscan.models import TwitscanUser
 
 
@@ -68,8 +67,8 @@ common_followers = common_items_maker(followers)
 common_friends = common_items_maker(friends)
 common_hashtags = common_items_maker(hashtags)
 
-def table_generator_maker(table):
-    async def table_generator():
+def table_generator_maker(table) -> Callable:
+    async def table_generator() -> AsyncGenerator[tuple, None]:
         stmt = f'SELECT * FROM {table}'
         async with session.execute(stmt) as cursor:
             async for item in cursor:
@@ -142,37 +141,66 @@ async def users(name: str) -> AsyncGenerator[tuple, None]:
         async for item in cursor:
             yield item
 
-def similarity_for(target_user: TwitscanUser):
-    '''computes similarity score for all users towards target_user'''
-    stmt = f''' '''
-    similarities_result = session.execute(stmt)
-    similarities = dict((
-        result.user_id, (result.common_ht, result.common_followers, result.common_friends)
-    ) for result in similarities_result)
-    for user in followers(target_user):
-        score = similarities.get(user.user_id, (0, 0, 0))
-        yield {user:score}
+async def similarity_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
+    '''
+    computes similarity score for all users towards target_user
+    uses common followers and friends
+    '''
+    preprocess = f'''
+        DROP TABLE IF EXISTS tmp_followers;
+        DROP TABLE IF EXISTS tmp_followers_followers;
 
+        CREATE TEMP TABLE tmp_followers AS 
+        SELECT friend.user_id as f_id
+        FROM friend
+        WHERE friend.friend_follower_id = '{target_user_id}';
+
+        CREATE TEMP TABLE tmp_followers_followers AS
+        SELECT * FROM tmp_followers
+        LEFT JOIN friend ON friend.user_id = tmp_followers.f_id;
+    '''
+
+    stmt = '''
+        SELECT tmp_followers.f_id, SUM(friend) AS n_friends, SUM(follower) AS n_followers 
+        FROM tmp_followers_followers
+        INNER JOIN tmp_followers ON tmp_followers.f_id = tmp_followers_followers.friend_follower_id
+        GROUP BY tmp_followers.f_id
+    '''
+
+    cleanup = '''
+        DROP TABLE IF EXISTS tmp_followers;
+        DROP TABLE IF EXISTS tmp_followers_followers;
+    '''
+    await session.executescript(preprocess)
+    
+    async with session.execute(stmt) as cursor:
+        async for item in cursor:
+            yield item
+        
+    await session.executescript(cleanup)
+    
 
 async def interactions_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
-    '''computes all the interactions from followers to target_user
-        :=> the higher the more interaction
-    generator to get all interactions
+    '''
+    retrieves all interactions towarded to target_user from database
     '''
     stmt = f'''
         SELECT 
             user_id,
             SUM(fav) AS n_likes,
             SUM(comment) AS n_comments,
-            SUM(retweet) AS n_retweets
+            SUM(retweet) AS n_retweets,
+            COUNT(m_user_id) AS n_mentions
         FROM (
             SELECT 
                 user.user_id,
                 interaction.*,
-                status.user_id
+                status.user_id,
+                mention.user_id AS m_user_id
             FROM user
             LEFT JOIN interaction ON user.user_id = interaction.user_id
             LEFT JOIN status ON interaction.status_id = status.status_id
+            LEFT JOIN mention ON mention.status_id = status.status_id
             WHERE status.user_id = '{target_user_id}'
         )
         GROUP BY user_id
@@ -181,19 +209,31 @@ async def interactions_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
         async for item in cursor:
             yield item
 
-def engagement_for(target_user: TwitscanUser):
+
+async def engagement_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
     '''computes the engagement of user_a towards user_b :=> the higher the more engagement'''
     engagements = {}
-    interaction_score = interactions_for(target_user)
-    similarity_score = similarity_for(target_user)
-    return engagements
+    async for interaction in interactions_for(target_user_id):
+        user_id, n_likes, n_comments, n_retweets, n_mentions = interaction
+        engagements[user_id] = {'interactions':(n_likes, n_comments, n_retweets, n_mentions)}
+    async for similarity in similarity_for(target_user_id):
+        user_id, n_friends, n_followers = similarity
+        update = engagements.get(user_id, {'interactions':(0, 0, 0, 0)})
+        update['similarity'] = (n_friends, n_followers)
+        engagements[user_id] = update
+    for user_id in engagements.keys():
+        yield engagements[user_id]
 
 
 def db_info() -> dict[str, int]:
+    '''
+    synchronously request count for each table, return dictionnary of counts
+    '''
     async def async_count(table: str) -> Awaitable[int]:
         stmt = f'SELECT COUNT(*) FROM {table}'
-        result = await session.execute(stmt)
-        return result.fetchone()[0]
+        cursor = await session.execute(stmt)
+        result = await cursor.fetchone()
+        return result[0]
     count = lambda table: asyncio.get_event_loop().run_until_complete(async_count(table))
     info = {
         'user': count('user'),
@@ -205,3 +245,9 @@ def db_info() -> dict[str, int]:
         'hashtags': count('hashtag'),
     }
     return info
+
+if __name__ == '__main__':
+    (asyncio
+        .get_event_loop()
+        .run_until_complete(session.close())
+    )
