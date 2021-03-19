@@ -145,6 +145,7 @@ async def similarity_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
     '''
     computes similarity score for all users towards target_user
     uses common followers and friends
+    yields: user_id, n_friends, n_followers (in common)
     '''
     preprocess = f'''
         DROP TABLE IF EXISTS tmp_followers;
@@ -183,6 +184,7 @@ async def similarity_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
 async def interactions_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
     '''
     retrieves all interactions towarded to target_user from database
+    yields user_id, n_likes, n_comments, n_retweets, n_mentions
     '''
     stmt = f'''
         SELECT 
@@ -222,7 +224,7 @@ async def engagement_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
         update['similarity'] = (n_friends, n_followers)
         engagements[user_id] = update
     for user_id in engagements.keys():
-        yield engagements[user_id]
+        yield user_id, engagements[user_id]
 
 
 def db_info() -> dict[str, int]:
