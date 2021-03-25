@@ -35,8 +35,9 @@ def config_db(test: bool = False) -> tuple[Engine, Any]:
     session = Session()
     return engine, session
 
+
 async def get_async_session():
-    session = await aiosqlite.connect('data/twitter.db')
+    session = await aiosqlite.connect("data/twitter.db")
     return session
 
 
