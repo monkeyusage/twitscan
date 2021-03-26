@@ -123,7 +123,7 @@ async def status_by_id(status_id: int) -> Awaitable[tuple | None]:
     return status
 
 
-async def statuses_by_hashtag(hashtag: str) -> Awaitable[tuple | None]:
+async def statuses_by_hashtag(hashtag: str) -> AsyncGenerator[tuple | None]:
     stmt = f"""
         SELECT * FROM hashtag
         JOIN status on hashtag.status_id = status.status_id 

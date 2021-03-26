@@ -8,7 +8,6 @@ import pandas as pd
 from tqdm import tqdm
 from tweepy.models import User
 
-sys.path.append("../twitscan")
 from twitscan import api, query
 from twitscan.models import TwitscanUser
 
@@ -58,10 +57,10 @@ async def main() -> None:
         f.write(f"name,{hundred_cols}\n")
         for user in users:
             user_name = user.screen_name
-            follower_pics = follower_pic_urls(user)
+            follower_pics = await follower_pic_urls(user)
             f.write(f"{user_name},{follower_pics}\n")
 
     dataframe = pd.read_csv("data/excel/image_urls.csv")
     dataframe.to_excel("data/excel/image_urls.xlsx", index=False)
     os.remove('data/excel/image_urls.csv')
-    await query.async_session.close()
+    await query.session.close()
