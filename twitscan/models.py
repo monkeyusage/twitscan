@@ -13,62 +13,6 @@ if __name__ == "__main__":
     Base.metadata.bind = engine
 
 
-class EngagementScore:
-    __slots__ = [
-        "user",
-        "target_user",
-        "common_friends",
-        "common_followers",
-        "likes_given",
-        "comments_given",
-        "retweets_given",
-        "mentions_given",
-        "_score",
-    ]
-
-    def __init__(
-        self,
-        user: int,
-        target_user: int,
-        common_friends: int,
-        common_followers: int,
-        likes_given: int,
-        comments_given: int,
-        retweets_given: int,
-        mentions_given: int,
-    ):
-        self.user = user
-        self.target_user = target_user
-        self.common_friends = common_friends
-        self.common_followers = common_followers
-        self.likes_given = likes_given
-        self.comments_given = comments_given
-        self.retweets_given = retweets_given
-        self.mentions_given = mentions_given
-        self._score = None
-
-    @property
-    def score(self):
-        if self._score is None:
-            self.force()
-        return self._score
-
-    def force(self) -> None:
-        self._score = (
-            self.comments_given
-            + self.retweets_given
-            + self.mentions_given
-            + self.likes_given
-            + self.common_followers
-            + self.common_friends
-        )
-
-    def __repr__(self) -> str:
-        if self._score is None:
-            self.force()
-        return f"EngagementScore({self.user} -> {self.target_user}: {self.score})"
-
-
 class TwitscanStatus(Base):
     __tablename__ = "status"
     status_id = Column(Integer, primary_key=True)

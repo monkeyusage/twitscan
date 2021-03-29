@@ -13,5 +13,4 @@ Before you run the main script for the first time you need to:
 Developers should also run dev\build.(bat|sh) to build the project when they're done modifying code.
 
 scanner.py provides functions to scan twitter users and query.py provides functions to query the scanned users from your sqlalchemy/sqlite database.
-Feel free to add query and scanning functions for your personal use ! Pull requests's are welcome.
- 
+Feel free to add query and scanning functions for your personal use ! Pull requests's are welcome. 

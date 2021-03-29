@@ -3,7 +3,8 @@ import asyncio
 
 from twitscan import async_session as session
 from typing import Awaitable, AsyncGenerator, Callable
-from twitscan.models import TwitscanUser, EngagementScore
+from twitscan.models import TwitscanUser
+from twitscan.engagement import EngagementScore
 
 
 async def followers(user_id: int) -> AsyncGenerator[int, None]:
@@ -185,14 +186,14 @@ async def similarity_for(
 
     await session.executescript(preprocess)
     cursor = await session.execute(stmt)
-    results = await cursor.fetchone()
-    return results
+    result = await cursor.fetchone()
+    return result
 
 
 async def interactions_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
     """
-    retrieves all interactions towarded to target_user from database
-    yields user_id, n_likes, n_comments, n_retweets, n_mentions
+    retrieves all interactions towarded to target_user from database (except self interaction)
+    yields user_id, SUM(likes), SUM(comments), SUM(retweets), COUNT(mentions)
     """
     stmt = f"""
         SELECT 
@@ -211,22 +212,24 @@ async def interactions_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
             LEFT JOIN interaction ON user.user_id = interaction.user_id
             LEFT JOIN status ON interaction.status_id = status.status_id
             LEFT JOIN mention ON mention.status_id = status.status_id
-            WHERE status.user_id = '{target_user_id}'
+            WHERE status.user_id = '{target_user_id}' AND user.user_id != status.user_id
         )
         GROUP BY user_id
     """
     cursor = await session.execute(stmt)
-    for item in cursor:
+    results = await cursor.fetchall()
+    for item in results:
         yield item
 
 
 async def engagement_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
-    """computes the engagement of user_a towards user_b :=> the higher the more engagement"""
+    """computes the engagement twoards user_b :=> the higher the more engagement"""
     async for interaction in interactions_for(target_user_id):
         follower_id, n_likes, n_comments, n_retweets, n_mentions = interaction
-        n_friends, n_followers = await similarity_for(follower_id, target_user_id)
+        sim_score = await similarity_for(follower_id, target_user_id)
+        n_friends, n_followers = sim_score if sim_score else (None, None)
         yield EngagementScore(
-            n_friends, n_followers, n_likes, n_comments, n_retweets, n_mentions
+            follower_id, target_user_id, n_friends, n_followers, n_likes, n_comments, n_retweets, n_mentions
         )
 
 
@@ -254,7 +257,3 @@ def db_info() -> dict[str, int]:
         "hashtags": count("hashtag"),
     }
     return info
-
-
-if __name__ == "__main__":
-    (asyncio.get_event_loop().run_until_complete(session.close()))
