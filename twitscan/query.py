@@ -222,7 +222,7 @@ async def interactions_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
         yield item
 
 
-async def engagement_for(target_user_id: int) -> AsyncGenerator[tuple, None]:
+async def engagement_for(target_user_id: int) -> AsyncGenerator[EngagementScore, None]:
     """computes the engagement twoards user_b :=> the higher the more engagement"""
     async for interaction in interactions_for(target_user_id):
         follower_id, n_likes, n_comments, n_retweets, n_mentions = interaction
