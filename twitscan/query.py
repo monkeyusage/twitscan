@@ -229,7 +229,14 @@ async def engagement_for(target_user_id: int) -> AsyncGenerator[EngagementScore,
         sim_score = await similarity_for(follower_id, target_user_id)
         n_friends, n_followers = sim_score if sim_score else (None, None)
         yield EngagementScore(
-            follower_id, target_user_id, n_friends, n_followers, n_likes, n_comments, n_retweets, n_mentions
+            follower_id,
+            target_user_id,
+            n_friends,
+            n_followers,
+            n_likes,
+            n_comments,
+            n_retweets,
+            n_mentions,
         )
 
 

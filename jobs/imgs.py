@@ -34,7 +34,7 @@ async def follower_pic_urls(user: TwitscanUser) -> str:
         return ",".join(data)
     while len(data) < 100:
         data.append("")
-    assert len(data) == 100, f'data got len {len(data)}'
+    assert len(data) == 100, f"data got len {len(data)}"
     return ",".join(data)
 
 
@@ -62,5 +62,5 @@ async def main() -> None:
 
     dataframe = pd.read_csv("data/excel/image_urls.csv")
     dataframe.to_excel("data/excel/image_urls.xlsx", index=False)
-    os.remove('data/excel/image_urls.csv')
+    os.remove("data/excel/image_urls.csv")
     await query.session.close()

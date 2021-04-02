@@ -8,7 +8,7 @@ import sys
 from tqdm import tqdm
 import tweepy
 
-sys.path.append('../twitscan')
+sys.path.append("../twitscan")
 from twitscan.errors import UserProtectedError
 from twitscan.models import TwitscanUser
 from twitscan import scanner, query, sync_session

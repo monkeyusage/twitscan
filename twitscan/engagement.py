@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class EngagementScore:
     def __init__(
         self,
@@ -39,14 +40,17 @@ class EngagementScore:
         )
 
     @staticmethod
-    def deserialize(json_data:dict[str,int]) -> EngagementScore:
-        del json_data['score']
+    def deserialize(json_data: dict[str, int]) -> EngagementScore:
+        del json_data["score"]
         return EngagementScore(**json_data)
 
-
     def serialize(self) -> dict[str, int]:
-        attrs = [attr for attr in dir(self) if not attr.startswith('_')]
-        return dict((attr, getattr(self, attr)) for attr in attrs if type(getattr(self, attr)) == int)
+        attrs = [attr for attr in dir(self) if not attr.startswith("_")]
+        return dict(
+            (attr, getattr(self, attr))
+            for attr in attrs
+            if type(getattr(self, attr)) == int
+        )
 
     def __repr__(self) -> str:
         if self._score is None:
