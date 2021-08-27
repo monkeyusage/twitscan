@@ -1,9 +1,9 @@
+from __future__ import annotations
 import logging
-from typing import List, Optional, Set
 
 from tweepy.models import Status, User
 
-from twitscan import api, config, sync_session
+from twitscan import api, config, session
 from twitscan.errors import UserProtectedError
 from twitscan.models import (
     Entourage,
@@ -16,12 +16,12 @@ from twitscan.models import (
 )
 
 
-def check_status(raw_status: Status) -> Optional[TwitscanStatus]:
+def check_status(raw_status: Status) -> None | TwitscanStatus:
     """Check if status id is in database
     Return status if yes else return None
     """
-    existing_status: Optional[TwitscanStatus] = (
-        sync_session.query(TwitscanStatus)
+    existing_status: None | TwitscanStatus = (
+        session.query(TwitscanStatus)
         .filter(TwitscanStatus.status_id == raw_status.id)
         .one_or_none()
     )
@@ -33,7 +33,7 @@ def save_status(raw_status: Status) -> TwitscanStatus:
     Add mentions in database if they exist
     Return it anyway
     """
-    existing_status: Optional[TwitscanStatus] = check_status(raw_status)
+    existing_status: None | TwitscanStatus = check_status(raw_status)
     if existing_status is not None:
         return existing_status
 
@@ -53,51 +53,49 @@ def save_status(raw_status: Status) -> TwitscanStatus:
         is_retweet=is_retweet,
     )
 
-    mentions: List[Mention] = [
+    mentions: list[Mention] = [
         Mention(status_id=raw_status.id, user_id=user["id"])
         for user in raw_status.entities["user_mentions"]
     ]
 
-    urls: List[Link] = [
+    urls: list[Link] = [
         Link(status_id=raw_status.id, link=url["expanded_url"])
         for url in raw_status.entities["urls"]
     ]
 
-    tags: List[Hashtag] = [
+    tags: list[Hashtag] = [
         Hashtag(status_id=raw_status.id, hashtag_name=hashtag["text"])
         for hashtag in raw_status.entities["hashtags"]
     ]
 
-    sync_session.add(status)
-    sync_session.add_all(mentions)
-    sync_session.add_all(urls)
-    sync_session.add_all(tags)
+    session.add(status)
+    session.add_all(mentions)
+    session.add_all(urls)
+    session.add_all(tags)
 
-    sync_session.commit()
+    session.commit()
 
     return status
 
 
-def check_user(
-    screen_name: Optional[str] = None, user_id: Optional[int] = None
-) -> Optional[TwitscanUser]:
+def check_user_id(user_id:int=None)-> None | TwitscanUser:
     """Checks if user is in database, if so returns it otherwise returns None"""
-    if screen_name:
-        user: Optional[TwitscanUser] = (
-            sync_session.query(TwitscanUser)
-            .filter(TwitscanUser.screen_name == screen_name)
-            .one_or_none()
-        )
-    else:
-        user = (
-            sync_session.query(TwitscanUser)
-            .filter(TwitscanUser.user_id == user_id)
-            .one_or_none()
-        )
+    user = (
+        session.query(TwitscanUser)
+        .filter(TwitscanUser.user_id == user_id)
+        .one_or_none()
+    )
     return user
 
+def check_user_name(name:str) -> None | TwitscanUser:
+    user = (
+        session.query(TwitscanUser)
+        .filter(TwitscanUser.screen_name == name)
+        .one_or_none()
+    )
+    return user
 
-def scan_twitter(user_id: Optional[int], screen_name: Optional[str]) -> TwitscanUser:
+def scan_twitter(user_id: None | int, screen_name: None | str) -> TwitscanUser:
     """Fetches user from twitter, Saves it in db and queries db for user"""
     # fetch user from twitter
     raw_user: User = (
@@ -111,7 +109,7 @@ def scan_twitter(user_id: Optional[int], screen_name: Optional[str]) -> Twitscan
 
 
 def scan(
-    user_id: Optional[int] = None, screen_name: Optional[str] = None
+    user_id: None | int = None, screen_name: None | str = None
 ) -> TwitscanUser:
     """Checks if user is already scanned
     if so : retrieves user from db
@@ -121,7 +119,7 @@ def scan(
         (user_id is None) and (screen_name is None)
     ), "Both identifiers for User are None"
 
-    maybe_user: Optional[TwitscanUser] = check_user(
+    maybe_user: None | TwitscanUser = check_user(
         user_id=user_id, screen_name=screen_name
     )
     if maybe_user is None:
@@ -146,7 +144,7 @@ def save_entourage(user: User) -> None:
     followers: Set[int] = set(api.followers_ids(user.id))
 
     friends_followers = followers | friends
-    persons: List[Entourage] = []
+    persons: list[Entourage] = []
     for ff in friends_followers:
         is_friend = ff in friends
         is_follower = ff in followers
@@ -158,7 +156,7 @@ def save_entourage(user: User) -> None:
         )
         persons.append(person)
 
-    sync_session.add_all(persons)
+    session.add_all(persons)
 
 
 def save_interactions(user: User) -> None:
@@ -166,7 +164,7 @@ def save_interactions(user: User) -> None:
     Stores user's related interactions in database
     """
     logging.debug(f"Fetching tweets for {user.screen_name}")
-    chirps: List[TwitscanStatus] = [
+    chirps: list[TwitscanStatus] = [
         save_status(st)
         for st in api.user_timeline(
             screen_name=user.screen_name,
@@ -188,7 +186,7 @@ def save_interactions(user: User) -> None:
     )
 
     statuses = liked | retweeted | comments
-    interactions: List[Interaction] = []
+    interactions: list[Interaction] = []
     for status in statuses:
         is_like = status in liked
         is_retweet = status in retweeted
@@ -202,7 +200,7 @@ def save_interactions(user: User) -> None:
         )
         interactions.append(interaction)
 
-    sync_session.add_all(interactions)
+    session.add_all(interactions)
 
 
 def save_user(user: User) -> TwitscanUser:
@@ -220,14 +218,14 @@ def save_user(user: User) -> TwitscanUser:
         followers_count=user.followers_count,
         user_picture_url=user.profile_image_url,
     )
-    sync_session.add(twitscan_user)
+    session.add(twitscan_user)
     save_entourage(user)
     save_interactions(user)
 
-    sync_session.commit()
+    session.commit()
 
-    full_user: Optional[TwitscanUser] = (
-        sync_session.query(TwitscanUser).filter(TwitscanUser.user_id == user.id).first()
+    full_user: None | TwitscanUser = (
+        session.query(TwitscanUser).filter(TwitscanUser.user_id == user.id).first()
     )
     assert (
         full_user is not None
