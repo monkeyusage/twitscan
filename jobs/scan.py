@@ -10,8 +10,9 @@ import tweepy
 
 sys.path.append("../twitscan")
 from twitscan.errors import UserProtectedError
-from twitscan.models import TwitscanUser
-from twitscan import scanner, query, session
+from twitscan.models import Entourage, TwitscanUser
+from twitscan import scanner, session
+
 
 def handle_user_scan(
     user_id: int | None = None, name: str | None = None
@@ -56,21 +57,27 @@ def main() -> None:
     with open("data/users.txt", "r") as file:
         users = file.read().split("\n")
 
-    scanned_ids = set(map(lambda user: user.user_id, query.all_users()))
+    scanned_ids = set(map(lambda user: user.user_id, session.query(TwitscanUser).all()))
     for user in users:
         print(f"Scanning main user {user}")
         twitter_user: TwitscanUser | None = handle_user_scan(name=user)
         if twitter_user is None:
+            print(f"Did not find main user {user} in DB")
             continue
-        followers: list[int] = query.followers(twitter_user.user_id)
-        follower_ids: list[int] = list(
-            filter(lambda follower_id: follower_id not in scanned_ids, followers)
+        followers: list[Entourage] = list(
+            filter(
+                lambda ent: ent.follower and ent.friend_follower_id not in scanned_ids,
+                twitter_user.entourage,
+            )
         )
-        if len(follower_ids) >= 1600:
+
+        if len(followers) >= 1600:
             logging.debug(
                 f"Main user @{user} has more than allowed number of followers, skipping"
             )
             continue
-        for follower_id in tqdm(follower_ids):
-            print(f"Scanning follower: {follower_id}")
-            handle_user_scan(user_id=follower_id)
+        for follower in tqdm(followers):
+            uid = follower.friend_follower_id
+            print(f"Scanning follower: {uid}")
+            handle_user_scan(user_id=uid)
+            scanned_ids.add(uid)

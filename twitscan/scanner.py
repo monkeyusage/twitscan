@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 
 from tweepy.models import Status, User
@@ -78,7 +79,7 @@ def save_status(raw_status: Status) -> TwitscanStatus:
     return status
 
 
-def check_user_id(user_id:int=None)-> None | TwitscanUser:
+def check_user_id(user_id: int | None) -> None | TwitscanUser:
     """Checks if user is in database, if so returns it otherwise returns None"""
     user = (
         session.query(TwitscanUser)
@@ -87,13 +88,15 @@ def check_user_id(user_id:int=None)-> None | TwitscanUser:
     )
     return user
 
-def check_user_name(name:str) -> None | TwitscanUser:
+
+def check_user_name(name: str | None) -> None | TwitscanUser:
     user = (
         session.query(TwitscanUser)
         .filter(TwitscanUser.screen_name == name)
         .one_or_none()
     )
     return user
+
 
 def scan_twitter(user_id: None | int, screen_name: None | str) -> TwitscanUser:
     """Fetches user from twitter, Saves it in db and queries db for user"""
@@ -108,9 +111,7 @@ def scan_twitter(user_id: None | int, screen_name: None | str) -> TwitscanUser:
     return save_user(raw_user)  # add user to database
 
 
-def scan(
-    user_id: None | int = None, screen_name: None | str = None
-) -> TwitscanUser:
+def scan(user_id: None | int = None, screen_name: None | str = None) -> TwitscanUser:
     """Checks if user is already scanned
     if so : retrieves user from db
     else : scans user from twitter adds it to db and returns it
@@ -119,8 +120,8 @@ def scan(
         (user_id is None) and (screen_name is None)
     ), "Both identifiers for User are None"
 
-    maybe_user: None | TwitscanUser = check_user(
-        user_id=user_id, screen_name=screen_name
+    maybe_user: None | TwitscanUser = (
+        check_user_id(user_id) if user_id else check_user_name(screen_name)
     )
     if maybe_user is None:
         logging.debug(

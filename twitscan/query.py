@@ -1,122 +1,40 @@
 from __future__ import annotations
 
-from tweepy.models import Model
-from twitscan.models import TwitscanUser
-from twitscan.scanner import check_user
+from typing import Iterable, Iterator
 
 from twitscan import session
-from typing import Iterator, Callable, Iterable, Any, TypeVar
-T = TypeVar("T")
+from twitscan.models import TwitscanStatus, TwitscanUser
+from twitscan.scanner import check_user_id
 
-def followers(user_id: int) -> list[tuple[int]]:
-    stmt = f"""
-        SELECT friend_follower_id FROM friend
-        WHERE (user_id == {user_id}) AND (follower IS TRUE)
-    """
-    cursor = session.execute(stmt)
-    return cursor.fetchall()
-
-
-def friends(user_id: int) -> list[tuple[int]]:
-    stmt = f"""
-        SELECT friend_follower_id FROM friend
-        WHERE (user_id == {user_id}) AND (friend IS TRUE)
-    """
-    cursor = session.execute(stmt)
-    return cursor.fetchall()
-
-
-def entourage(user_id: int) -> list[tuple[int]]:
-    stmt = f"""
-        SELECT friend_follower_id FROM friend
-        WHERE user_id == {user_id}
-    """
-    cursor = session.execute(stmt)
-    return cursor.fetchall()
-
-
-def hashtags(user_id: int) -> list[tuple[str]]:
-    """takes user and returns used hashtags"""
-    stmt = f"""
-        SELECT hashtag_name FROM hashtag
-        JOIN status ON status.status_by_id = hashtag.status_id
-        WHERE status.user_id == {user_id}
-    """
-    cursor = session.execute(stmt)
-    return cursor.fetchall()
-
-
-def common_items_maker(func: Callable[[int], list[tuple[T]]]):
-    def common_func(user_a: int, user_b: int) -> list[T]:
-        a_set: set[T] = set()
-        common_list: list[T] = []
-        for item in func(user_a):
-            a_set.add(item[0])
-        for item in func(user_b):
-            if item in a_set:
-                common_list.append(item[0])
-        return common_list
-    return common_func
-
-
-common_entourage = common_items_maker(entourage)
-common_followers = common_items_maker(followers)
-common_friends = common_items_maker(friends)
-common_hashtags = common_items_maker(hashtags)
-
-def all_users():
-    return session.query(TwitscanUser).all()
-
-def all_statuses():
-    return session.query(TwitscanUser).all()
-
-def all_users():
-    return session.query(TwitscanUser).all()
-def all_users():
-    return session.query(TwitscanUser).all()
-def all_users():
-    return session.query(TwitscanUser).all()
-all_users = table_maker("user")
-all_statuses = table_maker("status")
-all_interactions = table_maker("interaction")
-all_entourages = table_maker("friend")
-all_mentions = table_maker("mention")
-all_links = table_maker("link")
-all_hashtags = table_maker("hashtag")
 
 def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
     user = (
-        session
-        .query(TwitscanUser)
+        session.query(TwitscanUser)
         .filter(TwitscanUser.screen_name == screen_name)
         .one_or_none()
     )
     return user
 
 
-def user_by_id(user_id: int) -> tuple | None:
-    result = session.execute(
-        f"""
-        SELECT * FROM user
-        WHERE user_id = '{user_id}'
-    """
+def user_by_id(user_id: int) -> TwitscanUser | None:
+    user = (
+        session.query(TwitscanUser)
+        .filter(TwitscanUser.user_id == user_id)
+        .one_or_none()
     )
-    user = result.fetchone()
     return user
 
 
 def status_by_id(status_id: int) -> tuple | None:
-    result = session.execute(
-        f"""
-        SELECT * FROM status
-        WHERE status_id == '{status_id}'
-    """
+    status = (
+        session.query(TwitscanStatus)
+        .filter(TwitscanStatus.status_id == status_id)
+        .one_or_none()
     )
-    status = result.fetchone()
     return status
 
 
-def statuses_by_hashtag(hashtag: str) -> Iterable[tuple]:
+def statuses_by_hashtag(hashtag: str) -> list[tuple]:
     stmt = f"""
         SELECT * FROM hashtag
         JOIN status on hashtag.status_id = status.status_id 
@@ -126,7 +44,7 @@ def statuses_by_hashtag(hashtag: str) -> Iterable[tuple]:
     return cursor.fetchall()
 
 
-def statuses(string: str) -> Iterable[tuple]:
+def statuses(string: str) -> list[tuple]:
     stmt = f"""
         SELECT * FROM status
         WHERE status.text LIKE '%{string}%'
@@ -145,22 +63,21 @@ def users(name: str) -> Iterator[tuple]:
         yield item
 
 
-def similarity(follower_id: int, target_user_id: int) -> int | None:
+def similarity(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
     """
     computes similarity score for follower towards target_user
-    returns: user_id, n_friends, n_followers (in common)
+    returns: size of common entourage (in common)
     """
-    for user_id in (follower_id, target_user_id):
-        if check_user(user_id=user_id) is None:
-            print("One user is not in database")
-            return None
-    entourage_sum = len(common_entourage(follower_id, target_user_id))
-    hashtags_sum = len(common_hashtags(follower_id, target_user_id))
-    
-    return entourage_sum + hashtags_sum
+    for user in (user_a, user_b):
+        assert check_user_id(user_a) is not None, f"User {user} not in db"
+
+    ent_a = set([ent.friend_follower_id for ent in user_a.entourage])
+    ent_b = set([ent.friend_follower_id for ent in user_b.entourage])
+
+    return len(ent_a.intersection(ent_b))
 
 
-def popularity(target_user_id: int) -> list[tuple]:
+def popularity(target_user_id: int) -> int:
     """
     retrieves all interactions towarded to target_user from database (except self interaction)
     yields user_id, SUM(likes), SUM(comments), SUM(retweets), COUNT(mentions)
@@ -187,13 +104,15 @@ def popularity(target_user_id: int) -> list[tuple]:
         GROUP BY user_id
     """
     cursor = session.execute(stmt)
-    return cursor.fetchall()
+    ret = cursor.fetchall()
+    return ret
 
 
 def db_info() -> dict[str, int | None]:
     """
     count for each table, return dictionnary of counts
     """
+
     def count(table: str) -> int | None:
         stmt = f"SELECT COUNT(*) FROM {table}"
         cursor = session.execute(stmt)

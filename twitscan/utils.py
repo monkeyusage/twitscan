@@ -1,7 +1,9 @@
 from __future__ import annotations
-from twitscan.query import user_by_screen_name, session
-from typing import Awaitable
+
 import os
+from typing import Awaitable
+
+from twitscan.query import session, user_by_screen_name
 
 
 async def get_test_user() -> Awaitable[tuple | None]:

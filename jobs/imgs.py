@@ -25,7 +25,10 @@ def follower_pic_urls(user: tuple) -> str:
             follower: User = api.get_user(user_id=f_uid)
         except:
             continue
-        if isinstance(follower.profile_image_url, str) and follower.profile_image_url != "":
+        if (
+            isinstance(follower.profile_image_url, str)
+            and follower.profile_image_url != ""
+        ):
             counter += 1
             data.append(follower.profile_image_url)
         if counter >= 100:

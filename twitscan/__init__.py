@@ -7,8 +7,8 @@ __version__ = "0.0.2"
 __author__ = "monkeyusage"
 __license__ = "MIT"
 import os
-from typing import Any
 from atexit import register
+from typing import Any
 
 import tweepy
 from sqlalchemy import create_engine
@@ -25,9 +25,11 @@ auth.set_access_token(access_token, access_token_secret)
 
 
 def config_db(test: bool = False) -> tuple[Engine, Any]:
-    engine: Engine = create_engine("sqlite://")  if test else create_engine(
-        "sqlite:///data/twitter.db"
-    ) # test db is in memory
+    engine: Engine = (
+        create_engine("sqlite://")
+        if test
+        else create_engine("sqlite:///data/twitter.db")
+    )  # test db is in memory
     Session = sessionmaker()
     Session.configure(bind=engine)
     session = Session()

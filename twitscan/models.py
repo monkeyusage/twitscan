@@ -12,6 +12,7 @@ if __name__ == "__main__":
     engine = create_engine("sqlite:///data/twitter.db")
     Base.metadata.bind = engine
 
+
 class TwitscanStatus(Base):
     __tablename__ = "status"
     status_id = Column(Integer, primary_key=True)
