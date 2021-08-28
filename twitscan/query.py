@@ -62,8 +62,19 @@ def users(name: str) -> Iterator[tuple]:
     for item in cursor:
         yield item
 
+def hashtags_used(user:TwitscanUser) -> set[str]:
+    used = set()
+    for status in user.chirps:
+        for hashtag in status.hashtags:
+            used.add(hashtag.hashtag_name)
+    return used
 
-def similarity(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
+def mentions(user:TwitscanUser, target_id:int) -> int:
+    counter = 0
+    for status in user.chirps:
+
+
+def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
     """
     computes similarity score for follower towards target_user
     returns: size of common entourage (in common)
@@ -71,41 +82,32 @@ def similarity(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
     for user in (user_a, user_b):
         assert check_user_id(user_a) is not None, f"User {user} not in db"
 
-    ent_a = set([ent.friend_follower_id for ent in user_a.entourage])
-    ent_b = set([ent.friend_follower_id for ent in user_b.entourage])
+    entourage_a = set([ent.friend_follower_id for ent in user_a.entourage])
+    entourage_b = set([ent.friend_follower_id for ent in user_b.entourage])
 
-    return len(ent_a.intersection(ent_b))
+    hashtags_a = hashtags_used(user_a)
+    a_mentions_b = 0
+
+    for status in user_a.chirps:
+        for mention in status.user_mentions:
+            if mention.user_id == user_b.user_id:
+                a_mentions_b += 1
+        for hashtag in status.hashtags:
+            hashtags_a.add(hashtag)
+
+    
+    hashtags_b = set()
+    b_mentions_a = 0
+    for status in user_a.chirps:
+        for mention in status.user_mentions:
+            if mention.user_id == user_a.user_id:
+                b_mentions_a += 1
+        for hashtag in status.hashtags:
+            hashtags_b.add(hashtag)
 
 
-def popularity(target_user_id: int) -> int:
-    """
-    retrieves all interactions towarded to target_user from database (except self interaction)
-    yields user_id, SUM(likes), SUM(comments), SUM(retweets), COUNT(mentions)
-    """
-    stmt = f"""
-        SELECT 
-            user_id,
-            SUM(fav) AS n_likes,
-            SUM(comment) AS n_comments,
-            SUM(retweet) AS n_retweets,
-            COUNT(m_user_id) AS n_mentions
-        FROM (
-            SELECT 
-                user.user_id,
-                interaction.*,
-                status.user_id,
-                mention.user_id AS m_user_id
-            FROM user
-            LEFT JOIN interaction ON user.user_id = interaction.user_id
-            LEFT JOIN status ON interaction.status_id = status.status_id
-            LEFT JOIN mention ON mention.status_id = status.status_id
-            WHERE status.user_id = '{target_user_id}' AND user.user_id != status.user_id
-        )
-        GROUP BY user_id
-    """
-    cursor = session.execute(stmt)
-    ret = cursor.fetchall()
-    return ret
+
+    return 
 
 
 def db_info() -> dict[str, int | None]:
