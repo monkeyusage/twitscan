@@ -59,7 +59,7 @@ def hashtags_used(user: TwitscanUser) -> set[str]:
 
 def n_mentions(user: TwitscanUser, target_id: int) -> float:
     mention_counter = 0
-    total_mentions = 0
+    total_mentions = 1
     for status in user.chirps:
         for mention in status.user_mentions:
             if mention.user_id == target_id:
@@ -69,7 +69,7 @@ def n_mentions(user: TwitscanUser, target_id: int) -> float:
 
 
 def n_interactions(user: TwitscanUser, target_user: int) -> tuple[float, float, float]:
-    fav_counter, rt_counter, comment_counter = 0, 0, 0
+    fav_counter, rt_counter, comment_counter = 1, 1, 1
     fav, retweet, comment = 0, 0, 0
     for interaction in user.interacted_tweets:
         maybe_status: None | TwitscanStatus = (
