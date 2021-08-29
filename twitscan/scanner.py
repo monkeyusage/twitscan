@@ -6,15 +6,8 @@ from tweepy.models import Status, User
 
 from twitscan import api, config, session
 from twitscan.errors import UserProtectedError
-from twitscan.models import (
-    Entourage,
-    Hashtag,
-    Interaction,
-    Link,
-    Mention,
-    TwitscanStatus,
-    TwitscanUser,
-)
+from twitscan.models import (Entourage, Hashtag, Interaction, Link, Mention,
+                             TwitscanStatus, TwitscanUser)
 
 
 def check_status(raw_status: Status) -> None | TwitscanStatus:
@@ -79,9 +72,9 @@ def save_status(raw_status: Status) -> TwitscanStatus:
     return status
 
 
-def check_user_id(user_id: int | None) -> None | TwitscanUser:
+def check_user_id(user_id: int) -> None | TwitscanUser:
     """Checks if user is in database, if so returns it otherwise returns None"""
-    user = (
+    user: None | TwitscanUser = (
         session.query(TwitscanUser)
         .filter(TwitscanUser.user_id == user_id)
         .one_or_none()
@@ -90,7 +83,7 @@ def check_user_id(user_id: int | None) -> None | TwitscanUser:
 
 
 def check_user_name(name: str | None) -> None | TwitscanUser:
-    user = (
+    user: None | TwitscanUser = (
         session.query(TwitscanUser)
         .filter(TwitscanUser.screen_name == name)
         .one_or_none()
@@ -140,9 +133,9 @@ def save_entourage(user: User) -> None:
     Pushes those ids in user's entourage
     """
     logging.debug(f"Fetching friends (followees) for {user.screen_name}")
-    friends: Set[int] = set(api.friends_ids(user.id))
+    friends: set[int] = set(api.friends_ids(user.id))
     logging.debug(f"Fetching followers for {user.screen_name}")
-    followers: Set[int] = set(api.followers_ids(user.id))
+    followers: set[int] = set(api.followers_ids(user.id))
 
     friends_followers = followers | friends
     persons: list[Entourage] = []
@@ -177,12 +170,12 @@ def save_interactions(user: User) -> None:
 
     logging.debug(f"Fetching favorites for {user.screen_name}")
 
-    liked: Set[int] = set(
+    liked: set[int] = set(
         [save_status(st).status_id for st in api.favorites(user.screen_name)]
     )
 
-    retweeted: Set[int] = set([chirp.status_id for chirp in chirps if chirp.is_retweet])
-    comments: Set[int] = set(
+    retweeted: set[int] = set([chirp.status_id for chirp in chirps if chirp.is_retweet])
+    comments: set[int] = set(
         [chirp.status_id for chirp in chirps if chirp.in_reply_to_status_id]
     )
 

@@ -1,8 +1,8 @@
 from os import system
 
 cmds = [
-    "isort twitscan",
     "black .",
+    "isort twitscan",
     "mypy twitscan --strict --ignore-missing-imports",
     "pytest tests",
     "pylint twitscan",

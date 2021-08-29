@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from typing import Iterable, Iterator
-
 from twitscan import session
 from twitscan.models import TwitscanStatus, TwitscanUser
 from twitscan.scanner import check_user_id
 
 
 def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
-    user = (
+    user: TwitscanUser | None = (
         session.query(TwitscanUser)
         .filter(TwitscanUser.screen_name == screen_name)
         .one_or_none()
@@ -17,7 +15,7 @@ def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
 
 
 def user_by_id(user_id: int) -> TwitscanUser | None:
-    user = (
+    user: TwitscanUser | None = (
         session.query(TwitscanUser)
         .filter(TwitscanUser.user_id == user_id)
         .one_or_none()
@@ -25,8 +23,8 @@ def user_by_id(user_id: int) -> TwitscanUser | None:
     return user
 
 
-def status_by_id(status_id: int) -> tuple | None:
-    status = (
+def status_by_id(status_id: int) -> TwitscanStatus | None:
+    status: TwitscanStatus | None = (
         session.query(TwitscanStatus)
         .filter(TwitscanStatus.status_id == status_id)
         .one_or_none()
@@ -34,72 +32,107 @@ def status_by_id(status_id: int) -> tuple | None:
     return status
 
 
-def statuses_by_hashtag(hashtag: str) -> list[tuple]:
-    stmt = f"""
-        SELECT * FROM hashtag
-        JOIN status on hashtag.status_id = status.status_id 
-        WHERE hashtag.hashtag_name = '{hashtag}'
-    """
-    cursor = session.execute(stmt)
-    return cursor.fetchall()
+def statuses_by_hashtag(hashtag: str) -> list[TwitscanStatus]:
+    statuses: list[TwitscanStatus] = []
+    for status in TwitscanStatus.query.filter(
+        hashtag in map(lambda ht: ht.hashtag_name, TwitscanStatus.hashtags)
+    ):
+        statuses.append(status)
+    return statuses
 
 
-def statuses(string: str) -> list[tuple]:
-    stmt = f"""
-        SELECT * FROM status
-        WHERE status.text LIKE '%{string}%'
-    """
-    cursor = session.execute(stmt)
-    return cursor.fetchall()
+def statuses(string: str) -> list[TwitscanStatus]:
+    return TwitscanStatus.query.filter(TwitscanStatus.text.like(f"%{string}%")).all()
 
 
-def users(name: str) -> Iterator[tuple]:
-    stmt = f"""
-        SELECT * FROM user
-        WHERE user.screen_name LIKE '%{name}%'
-    """
-    cursor = session.execute(stmt)
-    for item in cursor:
-        yield item
+def users(name: str) -> list[tuple]:
+    return TwitscanUser.query.filter(TwitscanUser.screen_name.like(f"%{name}%")).all()
 
-def hashtags_used(user:TwitscanUser) -> set[str]:
+
+def hashtags_used(user: TwitscanUser) -> set[str]:
     used = set()
     for status in user.chirps:
         for hashtag in status.hashtags:
             used.add(hashtag.hashtag_name)
     return used
 
-def n_mentions(user:TwitscanUser, target_id:int) -> int:
-    counter = 0
+
+def n_mentions(user: TwitscanUser, target_id: int) -> float:
+    mention_counter = 0
+    total_mentions = 0
     for status in user.chirps:
         for mention in status.user_mentions:
             if mention.user_id == target_id:
-                counter += 1
-    return counter
+                mention_counter += 1
+            total_mentions += 1
+    return mention_counter / total_mentions
 
-def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
+
+def n_interactions(user: TwitscanUser, target_user: int) -> tuple[float, float, float]:
+    fav_counter, rt_counter, comment_counter = 0, 0, 0
+    fav, retweet, comment = 0, 0, 0
+    for interaction in user.interacted_tweets:
+        maybe_status: None | TwitscanStatus = (
+            session.query(TwitscanStatus)
+            .filter(TwitscanStatus.status_id == interaction.status_id)
+            .one_or_none()
+        )
+        if maybe_status is None:
+            continue
+        if interaction.fav:
+            fav_counter += 1
+        if interaction.retweet:
+            rt_counter += 1
+        if interaction.comment:
+            comment_counter += 1
+        if maybe_status.user_id == target_user:
+            if interaction.fav:
+                fav += 1
+            if interaction.retweet:
+                retweet += 1
+            if interaction.comment:
+                comment += 1
+    return (fav / fav_counter, retweet / rt_counter, comment / comment_counter)
+
+
+def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> float:
     """
-    computes similarity score for follower towards target_user
-    returns: size of common entourage (in common)
+    computes proximity score between two users
     """
-    total_score = 0
     for user in (user_a, user_b):
-        assert check_user_id(user_a) is not None, f"User {user} not in db"
-    
-    entourage_a = set([ent.friend_follower_id for ent in user_a.entourage])
+        assert check_user_id(user.user_id) is not None, f"User {user} not in db"
+
+    entourage_a = set(ent.friend_follower_id for ent in user_a.entourage)
     hashtags_a = hashtags_used(user_a)
     a_mentions_b = n_mentions(user_a, user_b.user_id)
+    a_favs_b, a_rt_b, a_cmt_b = n_interactions(user_a, user_b.user_id)
 
     entourage_b = set([ent.friend_follower_id for ent in user_b.entourage])
     hashtags_b = hashtags_used(user_b)
     b_mentions_a = n_mentions(user_b, user_a.user_id)
+    b_favs_a, b_rt_a, b_cmt_a = n_interactions(user_b, user_a.user_id)
 
-    common_entourage = len(entourage_a.intersection(entourage_b))
-    common_hashtags = len(hashtags_a.intersection(hashtags_b))
+    # weigh common entourage / hashtags by number of entourage acquired / hashtags used
+    common_entourage = len(entourage_a.intersection(entourage_b)) / (
+        len(entourage_b) + len(entourage_a)
+    )
+    common_hashtags = len(hashtags_a.intersection(hashtags_b)) / (
+        len(hashtags_b) + len(hashtags_a)
+    )
+
     total_mentions = a_mentions_b + b_mentions_a
+    total_favs = a_favs_b + b_favs_a
+    total_rts = a_rt_b + b_rt_a
+    total_cmts = a_cmt_b + b_cmt_a
 
-
-    return 
+    return (
+        common_entourage
+        + common_hashtags
+        + total_mentions * 10
+        + total_favs * 5
+        + total_rts * 10
+        + total_cmts * 10
+    )
 
 
 def db_info() -> dict[str, int | None]:

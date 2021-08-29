@@ -13,7 +13,6 @@ if __name__ == "__main__":
     Base.metadata.bind = engine
 
 
-
 class Mention(Base):
     __tablename__ = "mention"
     mention_id = Column(Integer, primary_key=True)
@@ -34,6 +33,7 @@ class Link(Base):
     status_id = Column(Integer, ForeignKey("status.status_id"), nullable=False)
     link = Column(String)
 
+
 class TwitscanStatus(Base):
     __tablename__ = "status"
     status_id = Column(Integer, primary_key=True)
@@ -45,9 +45,13 @@ class TwitscanStatus(Base):
     in_reply_to_user_id = Column(Integer)
     is_retweet = Column(Boolean, nullable=False)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
-    user_mentions : Iterable[Mention]= relationship("Mention", backref=backref("status"), lazy=True)
-    hashtags : Iterable[Hashtag] = relationship("Hashtag", backref=backref("status"), lazy=True)
-    links : Iterable[Link] = relationship("Link", backref=backref("status"), lazy=True)
+    user_mentions: Iterable[Mention] = relationship(
+        "Mention", backref=backref("status"), lazy=True
+    )
+    hashtags: Iterable[Hashtag] = relationship(
+        "Hashtag", backref=backref("status"), lazy=True
+    )
+    links: Iterable[Link] = relationship("Link", backref=backref("status"), lazy=True)
 
     def __repr__(self) -> str:
         return f"TwitscanStatus: {self.user_id} on {self.created_at} twitted id={self.status_id}:\n\t{self.text})"
@@ -71,6 +75,7 @@ class Entourage(Base):
     friend = Column(Boolean, nullable=False)  # might not be analysed user
     follower = Column(Boolean, nullable=False)  # might not be analysed user
 
+
 class TwitscanUser(Base):
     __tablename__ = "user"
     user_id = Column(Integer, primary_key=True)
@@ -83,11 +88,15 @@ class TwitscanUser(Base):
     friends_count = Column(Integer, nullable=False, default=0)
     followers_count = Column(Integer, nullable=False, default=0)
     user_picture_url = Column(String, nullable=True)
-    chirps : Iterable[TwitscanStatus] = relationship(
+    chirps: Iterable[TwitscanStatus] = relationship(
         "TwitscanStatus", backref=backref("user"), lazy=True
     )  # either tweets or retweets
-    entourage : Iterable[Entourage] = relationship("Entourage", backref=backref("user"), lazy=True)
-    interacted_tweets : Iterable[Interaction] = relationship("Interaction", backref=backref("user"), lazy=True)
+    entourage: Iterable[Entourage] = relationship(
+        "Entourage", backref=backref("user"), lazy=True
+    )
+    interacted_tweets: Iterable[Interaction] = relationship(
+        "Interaction", backref=backref("user"), lazy=True
+    )
 
     def __repr__(self) -> str:
         return f"TwitscanUser({self.screen_name}, {self.user_id})"
