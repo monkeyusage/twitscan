@@ -69,42 +69,34 @@ def hashtags_used(user:TwitscanUser) -> set[str]:
             used.add(hashtag.hashtag_name)
     return used
 
-def mentions(user:TwitscanUser, target_id:int) -> int:
+def n_mentions(user:TwitscanUser, target_id:int) -> int:
     counter = 0
     for status in user.chirps:
-
+        for mention in status.user_mentions:
+            if mention.user_id == target_id:
+                counter += 1
+    return counter
 
 def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> int:
     """
     computes similarity score for follower towards target_user
     returns: size of common entourage (in common)
     """
+    total_score = 0
     for user in (user_a, user_b):
         assert check_user_id(user_a) is not None, f"User {user} not in db"
-
-    entourage_a = set([ent.friend_follower_id for ent in user_a.entourage])
-    entourage_b = set([ent.friend_follower_id for ent in user_b.entourage])
-
-    hashtags_a = hashtags_used(user_a)
-    a_mentions_b = 0
-
-    for status in user_a.chirps:
-        for mention in status.user_mentions:
-            if mention.user_id == user_b.user_id:
-                a_mentions_b += 1
-        for hashtag in status.hashtags:
-            hashtags_a.add(hashtag)
-
     
-    hashtags_b = set()
-    b_mentions_a = 0
-    for status in user_a.chirps:
-        for mention in status.user_mentions:
-            if mention.user_id == user_a.user_id:
-                b_mentions_a += 1
-        for hashtag in status.hashtags:
-            hashtags_b.add(hashtag)
+    entourage_a = set([ent.friend_follower_id for ent in user_a.entourage])
+    hashtags_a = hashtags_used(user_a)
+    a_mentions_b = n_mentions(user_a, user_b.user_id)
 
+    entourage_b = set([ent.friend_follower_id for ent in user_b.entourage])
+    hashtags_b = hashtags_used(user_b)
+    b_mentions_a = n_mentions(user_b, user_a.user_id)
+
+    common_entourage = len(entourage_a.intersection(entourage_b))
+    common_hashtags = len(hashtags_a.intersection(hashtags_b))
+    total_mentions = a_mentions_b + b_mentions_a
 
 
     return 
