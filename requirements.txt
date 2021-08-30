@@ -3,4 +3,5 @@ mypy
 tqdm
 black
 SQLAlchemy
-pylint
+pytest
+pandas

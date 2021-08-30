@@ -6,7 +6,7 @@ import os
 import sys
 
 from tqdm import tqdm
-import tweepy
+from tweepy import TweepError
 
 sys.path.append("../twitscan")
 from twitscan.errors import UserProtectedError
@@ -28,7 +28,7 @@ def handle_user_scan(
         except UserProtectedError:
             logging.debug(f"User {user} is protected")
             return None
-        except tweepy.TweepError as err:
+        except TweepError as err:
             logging.debug(f"Got tweepy error scanning {user}")
             logging.debug(f"\n\t{err}")
             logging.debug("Sleeping for 5 seconds then trying to resume")
@@ -39,7 +39,6 @@ def handle_user_scan(
             retries += 1
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt, terminating all")
-            session.close()
             exit(1)
     return None
 

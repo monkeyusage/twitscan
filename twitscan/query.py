@@ -33,24 +33,34 @@ def status_by_id(status_id: int) -> TwitscanStatus | None:
 
 
 def statuses_by_hashtag(hashtag: str) -> list[TwitscanStatus]:
-    statuses: list[TwitscanStatus] = []
-    for status in TwitscanStatus.query.filter(
-        hashtag in map(lambda ht: ht.hashtag_name, TwitscanStatus.hashtags)
-    ):
-        statuses.append(status)
+    statuses: list[TwitscanStatus] = (
+        session.query(TwitscanStatus)
+        .filter(hashtag in map(lambda ht: ht.hashtag_name, TwitscanStatus.hashtags))
+        .all()
+    )
     return statuses
 
 
 def statuses(string: str) -> list[TwitscanStatus]:
-    return TwitscanStatus.query.filter(TwitscanStatus.text.like(f"%{string}%")).all()
+    statuses: list[TwitscanStatus] = (
+        session.query(TwitscanStatus)
+        .filter(TwitscanStatus.text.like(f"%{string}%"))
+        .all()
+    )
+    return statuses
 
 
-def users(name: str) -> list[tuple]:
-    return TwitscanUser.query.filter(TwitscanUser.screen_name.like(f"%{name}%")).all()
+def users(name: str) -> list[TwitscanUser]:
+    usrs: list[TwitscanUser] = (
+        session.query(TwitscanUser)
+        .filter(TwitscanUser.screen_name.like(f"%{name}%"))
+        .all()
+    )
+    return usrs
 
 
 def hashtags_used(user: TwitscanUser) -> set[str]:
-    used = set()
+    used: set[str] = set()
     for status in user.chirps:
         for hashtag in status.hashtags:
             used.add(hashtag.hashtag_name)
@@ -143,8 +153,8 @@ def db_info() -> dict[str, int | None]:
     def count(table: str) -> int | None:
         stmt = f"SELECT COUNT(*) FROM {table}"
         cursor = session.execute(stmt)
-        result = cursor.fetchone()
-        return result[0]
+        result: tuple[int, ...] | None = cursor.fetchone()
+        return result[0] if result is not None else result
 
     info = {
         "user": count("user"),
