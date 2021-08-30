@@ -1,5 +1,6 @@
 from __future__ import annotations
-from jobs.scan import main
+from jobs.imgs import main
+from asyncio import run
 
 if __name__ == "__main__":
-    main()
+    run(main())

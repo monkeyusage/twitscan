@@ -1,70 +1,64 @@
-"""this job takes a hundred followers of two given Users and spits out an excel file with their profile pics"""
+"""this job takes users and download their profile pictures along with their followers's """
 from __future__ import annotations
 
-import os
-import sys
+from os import environ, listdir
+from sys import argv
 
-import pandas as pd
-from tqdm import tqdm
-from tweepy.models import User
-
-from twitscan import api, query
+from twitscan import query
 from twitscan.models import TwitscanUser
+from aiohttp import ClientSession
+from aiofiles import open
+from asyncio import Queue, QueueEmpty, create_task, gather
+
+API_KEY = environ["scraperapi_proxy"]
 
 
-def follower_pic_urls(user: tuple) -> str:
-    """queries list of followers twitter ids from database
-    gets the first 100 profile pic urls in a list & returns
-    comma separated items found. if not enough found make list
-    hundred items long anyway"""
-    followers_uids: list[int] = query.followers(user)
-    counter: int = 0
-    data: list[str] = []
-    for f_uid in tqdm(followers_uids):
-        try:
-            follower: User = api.get_user(user_id=f_uid)
-        except:
-            continue
-        if (
-            isinstance(follower.profile_image_url, str)
-            and follower.profile_image_url != ""
-        ):
-            counter += 1
-            data.append(follower.profile_image_url)
-        if counter >= 100:
-            break
-    if len(data) == 100:
-        return ",".join(data)
-    while len(data) < 100:
-        data.append("")
-    assert len(data) == 100, f"data got len {len(data)}"
-    return ",".join(data)
-
-
-def main() -> None:
-    if not os.path.exists("data/excel"):
-        os.makedirs("data/excel", exist_ok=True)
-    assert (
-        len(sys.argv) > 1
-    ), "you must input at least one valid TwitScanUser from your db"
-    users: list[TwitscanUser] = []
-    for user in sys.argv[1:]:
-        maybe_user = query.user_by_screen_name(user)
-        if maybe_user is None:
-            msg = "there is at least one invalid Twitter Screen Name, user should already be in database"
-            print(msg)
+async def download(client: ClientSession, user: TwitscanUser) -> None:
+    url = user.user_picture_url.replace("_normal", "_400x400")
+    if not url:
+        return
+    unlimited_url = f"http://api.scraperapi.com?api_key={API_KEY}&url={url}"
+    async with client.get(unlimited_url) as response:
+        if response.status != 200:
             return
-        users.append(maybe_user)
+        file = await open(f"imgs/profiles/{user.screen_name}.jpeg", mode="wb")
+        await file.write(await response.read())
+        await file.close()
 
-    with open("data/excel/image_urls.csv", "w") as f:
-        hundred_cols = ",".join([f"follower_{num}" for num in range(1, 101)])
-        f.write(f"name,{hundred_cols}\n")
-        for user in users:
-            user_name = user.screen_name
-            follower_pics = follower_pic_urls(user)
-            f.write(f"{user_name},{follower_pics}\n")
 
-    dataframe = pd.read_csv("data/excel/image_urls.csv")
-    dataframe.to_excel("data/excel/image_urls.xlsx", index=False)
-    os.remove("data/excel/image_urls.csv")
-    query.session.close()
+async def worker(client: ClientSession, queue: Queue[TwitscanUser]) -> None:
+    while True:
+        try:
+            user = queue.get_nowait()
+        except QueueEmpty:
+            break
+        await download(client, user)
+        queue.task_done()
+
+
+async def main():
+    already_scanned = set(map(lambda fname: fname.replace(".jpeg", ""), listdir("imgs/profiles")))
+    users: list[TwitscanUser] = []
+    for username in argv[1:]:
+        user = query.user_by_screen_name(username)
+        if user is None:
+            print(f"{username} is not in database")
+            continue
+        # get the f_ids
+        follower_ids = set(
+            map(lambda entourage: entourage.friend_follower_id, user.entourage)
+        )
+        # use them to query all the user's followers
+        maybe_followers: list[TwitscanUser | None] = [query.user_by_id(f_id) for f_id in follower_ids]
+        followers = [u for u in maybe_followers if (u is not None) and (u.screen_name not in already_scanned)]
+        users.extend(followers)
+
+    user_queue: Queue[TwitscanUser] = Queue()
+    for user in users:
+        user_queue.put_nowait(user)
+
+    WORKERS = 5
+    async with ClientSession() as client:
+        tasks = [create_task(worker(client, user_queue)) for _ in range(WORKERS)]
+        await user_queue.join()
+        await gather(*tasks)
