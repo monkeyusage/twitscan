@@ -10,7 +10,7 @@ __author__ = "monkeyusage"
 __license__ = "MIT"
 import os
 from atexit import register
-from typing import Any, Callable
+from typing import Any
 
 import tweepy
 from sqlalchemy import create_engine

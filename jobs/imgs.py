@@ -37,7 +37,9 @@ async def worker(client: ClientSession, queue: Queue[TwitscanUser]) -> None:
 
 
 async def main():
-    already_scanned = set(map(lambda fname: fname.replace(".jpeg", ""), listdir("imgs/profiles")))
+    already_scanned = set(
+        map(lambda fname: fname.replace(".jpeg", ""), listdir("imgs/profiles"))
+    )
     users: list[TwitscanUser] = []
     for username in argv[1:]:
         user = query.user_by_screen_name(username)
@@ -49,8 +51,14 @@ async def main():
             map(lambda entourage: entourage.friend_follower_id, user.entourage)
         )
         # use them to query all the user's followers
-        maybe_followers: list[TwitscanUser | None] = [query.user_by_id(f_id) for f_id in follower_ids]
-        followers = [u for u in maybe_followers if (u is not None) and (u.screen_name not in already_scanned)]
+        maybe_followers: list[TwitscanUser | None] = [
+            query.user_by_id(f_id) for f_id in follower_ids
+        ]
+        followers = [
+            u
+            for u in maybe_followers
+            if (u is not None) and (u.screen_name not in already_scanned)
+        ]
         users.extend(followers)
 
     user_queue: Queue[TwitscanUser] = Queue()
