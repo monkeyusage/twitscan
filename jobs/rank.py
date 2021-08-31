@@ -40,17 +40,16 @@ def main() -> None:
                 )
 
     dataframe = pd.read_csv("data/ranking.tsv", sep="\t")
-    dataframe = dataframe.sort_values("score", axis=1)
-    
-    dataframe = dataframe[dataframe["user"].isin(users)]
+    dataframe = dataframe.drop_duplicates("follower")
+    dataframe = dataframe.sort_values("score")
 
     dfs : list[pd.DataFrame] = []
-    for user in users:
+    for user in dataframe["user"].unique():
         df = dataframe[dataframe["user"] == user]
         dfs.append(df.head(50).append(df.tail(50)))
     
-    output = pd.concat(dfs, ignore_index=True)
-    output.to_csv("data/ranked.tsv", sep="\t")
+    output = pd.concat(dfs)
+    output.to_csv("data/ranked.tsv", sep="\t", index=False)
 
 if __name__ == "__main__":
     main()
