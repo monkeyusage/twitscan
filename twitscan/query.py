@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from twitscan import session
-from twitscan.models import TwitscanStatus, TwitscanUser
+from twitscan.models import Entourage, TwitscanStatus, TwitscanUser
 from twitscan.scanner import check_user_id
 
 
@@ -49,6 +49,11 @@ def statuses(string: str) -> list[TwitscanStatus]:
     )
     return statuses
 
+def followers(user_id:int) -> list[TwitscanUser]:
+    entourage = session.query(Entourage).filter(Entourage.user_id == user_id and Entourage.follower).all()
+    followers_ids = set(map(lambda ent: ent.friend_follower_id, entourage))
+    follower_users : list[TwitscanUser] = session.query(TwitscanUser).filter(TwitscanUser.user_id.in_(followers_ids)).all()
+    return follower_users
 
 def users(name: str) -> list[TwitscanUser]:
     usrs: list[TwitscanUser] = (

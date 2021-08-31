@@ -5,7 +5,6 @@ from tqdm import tqdm
 from twitscan import query
 import pandas as pd
 
-
 def main() -> None:
     with open("data/users.txt", "r") as file:
         users = file.read().splitlines()
@@ -39,3 +38,19 @@ def main() -> None:
                 file.write(
                     f"{maybe_user.screen_name}\t{follower.screen_name}\t{score}\n"
                 )
+
+    dataframe = pd.read_csv("data/ranking.tsv", sep="\t")
+    dataframe = dataframe.sort_values("score", axis=1)
+    
+    dataframe = dataframe[dataframe["user"].isin(users)]
+
+    dfs : list[pd.DataFrame] = []
+    for user in users:
+        df = dataframe[dataframe["user"] == user]
+        dfs.append(df.head(50).append(df.tail(50)))
+    
+    output = pd.concat(dfs, ignore_index=True)
+    output.to_csv("data/ranked.tsv", sep="\t")
+
+if __name__ == "__main__":
+    main()

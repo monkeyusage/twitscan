@@ -20,6 +20,8 @@ async def download(client: ClientSession, user: TwitscanUser) -> None:
     unlimited_url = f"http://api.scraperapi.com?api_key={API_KEY}&url={url}"
     async with client.get(unlimited_url) as response:
         if response.status != 200:
+            print(f"error with user {user}")
+            import pdb;pdb.set_trace()
             return
         file = await open(f"imgs/profiles/{user.screen_name}.jpeg", mode="wb")
         await file.write(await response.read())
@@ -41,6 +43,7 @@ async def main():
         map(lambda fname: fname.replace(".jpeg", ""), listdir("imgs/profiles"))
     )
     users: list[TwitscanUser] = []
+    assert argv[1:] != [], "empty argv, provide usernames please"
     for username in argv[1:]:
         user = query.user_by_screen_name(username)
         if user is None:
