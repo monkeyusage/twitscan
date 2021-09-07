@@ -49,11 +49,21 @@ def statuses(string: str) -> list[TwitscanStatus]:
     )
     return statuses
 
-def followers(user_id:int) -> list[TwitscanUser]:
-    entourage = session.query(Entourage).filter(Entourage.user_id == user_id and Entourage.follower).all()
+
+def followers(user_id: int) -> list[TwitscanUser]:
+    entourage = (
+        session.query(Entourage)
+        .filter(Entourage.user_id == user_id and Entourage.follower)
+        .all()
+    )
     followers_ids = set(map(lambda ent: ent.friend_follower_id, entourage))
-    follower_users : list[TwitscanUser] = session.query(TwitscanUser).filter(TwitscanUser.user_id.in_(followers_ids)).all()
+    follower_users: list[TwitscanUser] = (
+        session.query(TwitscanUser)
+        .filter(TwitscanUser.user_id.in_(followers_ids))
+        .all()
+    )
     return follower_users
+
 
 def users(name: str) -> list[TwitscanUser]:
     usrs: list[TwitscanUser] = (
@@ -107,10 +117,11 @@ def n_interactions(user: TwitscanUser, target_user: int) -> tuple[float, float, 
                 retweet += 1
             if interaction.comment:
                 comment += 1
+    # TODO: return all data without normalizing
     return (fav / fav_counter, retweet / rt_counter, comment / comment_counter)
 
 
-def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> float:
+def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> tuple[float, ...]:
     """
     computes proximity score between two users
     """
@@ -141,12 +152,12 @@ def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> float:
     total_cmts = a_cmt_b + b_cmt_a
 
     return (
-        common_entourage
-        + common_hashtags
-        + total_mentions * 10
-        + total_favs * 5
-        + total_rts * 10
-        + total_cmts * 10
+        common_entourage,
+        common_hashtags,
+        total_mentions,
+        total_favs,
+        total_rts,
+        total_cmts,
     )
 
 

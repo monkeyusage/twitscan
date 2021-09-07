@@ -21,7 +21,9 @@ async def download(client: ClientSession, user: TwitscanUser) -> None:
     async with client.get(unlimited_url) as response:
         if response.status != 200:
             print(f"error with user {user}")
-            import pdb;pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
             return
         file = await open(f"imgs/profiles/{user.screen_name}.jpeg", mode="wb")
         await file.write(await response.read())

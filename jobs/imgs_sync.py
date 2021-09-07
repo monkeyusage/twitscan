@@ -7,11 +7,12 @@ from time import sleep
 from requests import get
 from random import randint
 
+
 def download(user: TwitscanUser) -> None:
     url = user.user_picture_url.replace("_normal", "_400x400")
     if not url:
         return
-    sleep(randint(20,30))
+    sleep(randint(20, 30))
     print(f"Requesting {user}")
     response = get(url, stream=True)
     if not response.ok:
@@ -20,6 +21,7 @@ def download(user: TwitscanUser) -> None:
     with open(f"imgs/profiles/{user.screen_name}.jpeg", mode="wb") as file:
         for chunk in response.iter_content(1024):
             file.write(chunk)
+
 
 def main():
     already_scanned = set(
