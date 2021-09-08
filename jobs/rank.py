@@ -14,23 +14,23 @@ def main() -> None:
         "user",
         "follower",
         "common_entourage",
-        "entourage_a",
-        "entourage_b",
+        "entourage_user",
+        "entourage_follower",
         "common_hashtags",
-        "hashtags_a",
-        "hashtags_b",
-        "a_mentions_b",
-        "b_mentions_a",
-        "a_mentions_counter",
-        "b_mentions_counter",
-        "a_favs_b",
-        "b_favs_a",
-        "a_favs_count",
-        "b_favs_count",
-        "a_rt_b",
-        "b_rt_a",
-        "a_cmt_b",
-        "b_cmt_a"
+        "hashtags_user",
+        "hashtags_follower",
+        "user_mentions_follower",
+        "follower_mentions_user",
+        "user_mentions_counter",
+        "follower_mentions_counter",
+        "user_favs_follower",
+        "follower_favs_user",
+        "user_favs_count",
+        "follower_favs_count",
+        "user_rt_follower",
+        "follower_rt_user",
+        "user_cmt_follower",
+        "follower_cmt_user",
     ]
 
     if not exists("data/ranking.tsv"):
@@ -41,7 +41,9 @@ def main() -> None:
         already_scored_followers = {}
         tmp_df = pd.read_csv("data/ranking.tsv", sep="\t")
         for user in tmp_df["user"].unique():
-            already_scored_followers[user] = set(tmp_df[tmp_df["user"] == user]["follower"].values)
+            already_scored_followers[user] = set(
+                tmp_df[tmp_df["user"] == user]["follower"].values
+            )
 
     with open("data/ranking.tsv", "a") as file:
         for user in users:
@@ -57,7 +59,9 @@ def main() -> None:
                     continue
                 follower = query.user_by_id(entourage.friend_follower_id)
                 if follower is None:
-                    print("Did not find the follower in database, must be a private profile")
+                    print(
+                        "Did not find the follower in database, must be a private profile"
+                    )
                     continue
                 if follower.screen_name in already_scored_followers[user]:
                     print("Follower already scored")
@@ -68,6 +72,7 @@ def main() -> None:
                 file.write(
                     f"{maybe_user.screen_name}\t{follower.screen_name}\t{information}\n"
                 )
+
 
 if __name__ == "__main__":
     main()

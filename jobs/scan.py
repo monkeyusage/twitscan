@@ -51,7 +51,7 @@ def main() -> None:
 
     args = parser.parse_args()
     level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(level=level)
+    logging.basicConfig(filename="other/debug.log", level=level)
 
     with open("data/users.txt", "r") as file:
         users = file.read().split("\n")

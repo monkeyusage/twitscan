@@ -8,11 +8,11 @@ from twitscan.scanner import check_user_id
 
 
 class CacheRecord(TypedDict):
-    entourage : set[int]
-    hashtags : set[str]
-    pass
+    entourage: set[int]
+    hashtags: set[str]
 
-cache : dict[int, CacheRecord] = {}
+cache: dict[int, CacheRecord] = {}
+
 
 def user_by_screen_name(screen_name: str) -> TwitscanUser | None:
     user: TwitscanUser | None = (
@@ -131,9 +131,9 @@ def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> tuple[float, ...]:
         assert check_user_id(user.user_id) is not None, f"User {user} not in db"
 
     if cache.get(user_a.user_id) is None:
-        entourage_a = set(ent.friend_follower_id for ent in user_a.entourage)
+        entourage_a = set(map(lambda ent: ent.friend_follower_id, user_a.entourage))
         hashtags_a = hashtags_used(user_a)
-        cache[user_a.user_id] = CacheRecord(entourage = entourage_a, hashtags = hashtags_a)
+        cache[user_a.user_id] = CacheRecord(entourage=entourage_a, hashtags=hashtags_a)
     else:
         cr = cache[user_a.user_id]
         entourage_a = cr["entourage"]
@@ -141,7 +141,6 @@ def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> tuple[float, ...]:
 
     a_mentions_b, a_mentions_counter = n_mentions(user_a, user_b.user_id)
     a_favs_b, a_rt_b, a_cmt_b = n_interactions(user_a, user_b.user_id)
-
 
     entourage_b = set([ent.friend_follower_id for ent in user_b.entourage])
     hashtags_b = hashtags_used(user_b)
@@ -153,25 +152,37 @@ def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> tuple[float, ...]:
     common_hashtags = len(hashtags_a.intersection(hashtags_b))
 
     return (
-        common_entourage, len(entourage_a), len(entourage_b),
-        common_hashtags, len(hashtags_a), len(hashtags_b),
-        a_mentions_b, b_mentions_a, a_mentions_counter, b_mentions_counter,
-        a_favs_b, b_favs_a, user_a.favorites_count, user_b.favorites_count,
-        a_rt_b, b_rt_a,
-        a_cmt_b, b_cmt_a
+        common_entourage,
+        len(entourage_a),
+        len(entourage_b),
+        common_hashtags,
+        len(hashtags_a),
+        len(hashtags_b),
+        a_mentions_b,
+        b_mentions_a,
+        a_mentions_counter,
+        b_mentions_counter,
+        a_favs_b,
+        b_favs_a,
+        user_a.favorites_count,
+        user_b.favorites_count,
+        a_rt_b,
+        b_rt_a,
+        a_cmt_b,
+        b_cmt_a,
     )
 
 
-def db_info() -> dict[str, int | None]:
+def db_info() -> dict[str, int]:
     """
     count for each table, return dictionnary of counts
     """
 
-    def count(table: str) -> int | None:
+    def count(table: str) -> int:
         stmt = f"SELECT COUNT(*) FROM {table}"
         cursor = session.execute(stmt)
         result: tuple[int, ...] | None = cursor.fetchone()
-        return result[0] if result is not None else result
+        return result[0] if result is not None else 0
 
     info = {
         "user": count("user"),
