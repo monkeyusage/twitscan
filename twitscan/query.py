@@ -93,7 +93,7 @@ def n_mentions(user: TwitscanUser, target_id: int) -> float:
     return mention_counter / total_mentions
 
 
-def n_interactions(user: TwitscanUser, target_user: int) -> tuple[float, float, float]:
+def n_interactions(user: TwitscanUser, target_user: int) -> tuple[float, ...]:
     fav_counter, rt_counter, comment_counter = 1, 1, 1
     fav, retweet, comment = 0, 0, 0
     for interaction in user.interacted_tweets:
@@ -117,8 +117,7 @@ def n_interactions(user: TwitscanUser, target_user: int) -> tuple[float, float, 
                 retweet += 1
             if interaction.comment:
                 comment += 1
-    # TODO: return all data without normalizing
-    return (fav / fav_counter, retweet / rt_counter, comment / comment_counter)
+    return fav, retweet, comment, rt_counter, comment_counter
 
 
 def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> tuple[float, ...]:
@@ -131,20 +130,23 @@ def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> tuple[float, ...]:
     entourage_a = set(ent.friend_follower_id for ent in user_a.entourage)
     hashtags_a = hashtags_used(user_a)
     a_mentions_b = n_mentions(user_a, user_b.user_id)
-    a_favs_b, a_rt_b, a_cmt_b = n_interactions(user_a, user_b.user_id)
+    a_favs_b, a_rt_b, a_cmt_b, a_favs = n_interactions(user_a, user_b.user_id)
 
     entourage_b = set([ent.friend_follower_id for ent in user_b.entourage])
     hashtags_b = hashtags_used(user_b)
     b_mentions_a = n_mentions(user_b, user_a.user_id)
     b_favs_a, b_rt_a, b_cmt_a = n_interactions(user_b, user_a.user_id)
 
+    ent_a_len = len(entourage_a)
+    ent_b_len = len(entourage_b)
+    ent_len = ent_b_len + ent_a_len
+
+    hash_a_len = len(hashtags_a)
+    hash_b_len = len(hashtags_b)
+    hash_len = hash_b_len + hash_a_len
     # weigh common entourage / hashtags by number of entourage acquired / hashtags used
-    common_entourage = len(entourage_a.intersection(entourage_b)) / (
-        len(entourage_b) + len(entourage_a)
-    )
-    common_hashtags = len(hashtags_a.intersection(hashtags_b)) / (
-        len(hashtags_b) + len(hashtags_a)
-    )
+    common_entourage = len(entourage_a.intersection(entourage_b)) / ent_len if ent_len != 0 else 0
+    common_hashtags = len(hashtags_a.intersection(hashtags_b)) / hash_len if hash_len != 0 else 0
 
     total_mentions = a_mentions_b + b_mentions_a
     total_favs = a_favs_b + b_favs_a
@@ -152,6 +154,19 @@ def proximity(user_a: TwitscanUser, user_b: TwitscanUser) -> tuple[float, ...]:
     total_cmts = a_cmt_b + b_cmt_a
 
     return (
+        a_mentions_b,
+        b_mentions_a,
+        a_favs_b,
+        b_favs_a,
+        a_rt_b,
+        b_rt_a,
+        a_cmt_b,
+        b_cmt_a,
+        ent_a_len,
+        ent_len,
+        hash_a_len,
+        hash_b_len,
+        hash_len,
         common_entourage,
         common_hashtags,
         total_mentions,

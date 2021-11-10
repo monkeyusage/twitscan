@@ -48,11 +48,10 @@ def main() -> None:
                 file.write(
                     f"{maybe_user.screen_name}\t{follower.screen_name}\t{common_entourage}\t{common_hashtags}\t{total_mentions}\t{total_favs}\t{total_rts}\t{total_cmts}\t\n"
                 )
-                # TODO save individual scores in tsv
 
     dataframe = pd.read_csv("data/ranking.tsv", sep="\t")
     dataframe = dataframe.drop_duplicates("follower")
-    dataframe = dataframe.sort_values("score")
+    #dataframe = dataframe.sort_values("score")
 
     dfs: list[pd.DataFrame] = []
     for user in dataframe["user"].unique():
