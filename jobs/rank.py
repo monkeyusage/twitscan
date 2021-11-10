@@ -10,44 +10,69 @@ def main() -> None:
     with open("data/users.txt", "r") as file:
         users = file.read().splitlines()
 
+    columns = [
+        "user",
+        "follower",
+        "common_entourage",
+        "entourage_user",
+        "entourage_follower",
+        "common_hashtags",
+        "hashtags_user",
+        "hashtags_follower",
+        "user_mentions_follower",
+        "follower_mentions_user",
+        "user_mentions_counter",
+        "follower_mentions_counter",
+        "user_favs_follower",
+        "follower_favs_user",
+        "user_favs_count",
+        "follower_favs_count",
+        "user_rt_follower",
+        "follower_rt_user",
+        "user_cmt_follower",
+        "follower_cmt_user",
+    ]
+
     if not exists("data/ranking.tsv"):
         with open("data/ranking.tsv", "w") as file:
-            file.write(
-                "user\tfollower\tcommon_entourage\tcommon_hashtags\ttotal_mentions\ttotal_favs\ttotal_rts\ttotal_cmts\tscore\n"
-            )
-        already_scored_users: set[str] = set()
+            file.write("\t".join(columns) + "\n")
+        already_scored_followers: dict[str, set[str]] = {}
     else:
-        already_scored_users = set(
-            pd.read_csv("data/ranking.tsv", sep="\t")["follower"].values
-        )
+        already_scored_followers = {}
+        tmp_df = pd.read_csv("data/ranking.tsv", sep="\t")
+        for user in tmp_df["user"].unique():
+            already_scored_followers[user] = set(
+                tmp_df[tmp_df["user"] == user]["follower"].values
+            )
 
     with open("data/ranking.tsv", "a") as file:
-        for user in tqdm(users):
+        for user in users:
+            if user not in already_scored_followers.keys():
+                already_scored_followers[user] = set()
             maybe_user = query.user_by_screen_name(user)
             if maybe_user is None:
                 print("Did not find user in Database, skipping to the next one")
                 continue
             for entourage in tqdm(maybe_user.entourage):
                 if not entourage.follower:
+                    print("Not a follower")
                     continue
                 follower = query.user_by_id(entourage.friend_follower_id)
                 if follower is None:
-                    print("Did not find the follower in database")
+                    print(
+                        "Did not find the follower in database, must be a private profile"
+                    )
                     continue
-                if follower.screen_name in already_scored_users:
+                if follower.screen_name in already_scored_followers[user]:
                     print("Follower already scored")
                     continue
-                (
-                    common_entourage,
-                    common_hashtags,
-                    total_mentions,
-                    total_favs,
-                    total_rts,
-                    total_cmts,
-                ) = query.proximity(maybe_user, follower)
+                print(f"Scanning proximity between {maybe_user} and {follower}")
+                proximity_info = query.proximity(maybe_user, follower)
+                information = "\t".join(map(lambda info: str(info), proximity_info))
                 file.write(
-                    f"{maybe_user.screen_name}\t{follower.screen_name}\t{common_entourage}\t{common_hashtags}\t{total_mentions}\t{total_favs}\t{total_rts}\t{total_cmts}\t\n"
+                    f"{maybe_user.screen_name}\t{follower.screen_name}\t{information}\n"
                 )
+<<<<<<< HEAD
 
     dataframe = pd.read_csv("data/ranking.tsv", sep="\t")
     dataframe = dataframe.drop_duplicates("follower")
@@ -60,6 +85,8 @@ def main() -> None:
 
     output = pd.concat(dfs)
     output.to_csv("data/ranked.tsv", sep="\t", index=False)
+=======
+>>>>>>> f87d6feeaac68202d2740f7198853200c32f7b1a
 
 
 if __name__ == "__main__":
